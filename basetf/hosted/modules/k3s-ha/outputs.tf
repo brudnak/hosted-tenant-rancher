@@ -1,6 +1,26 @@
-output "public_ip_1" {
+output "server_ip" {
   value = aws_instance.aws_instance[0].public_ip
 }
+
+output "server_ip2" {
+  value = aws_instance.aws_instance[1].public_ip
+}
+
+output "db_password" {
+  value = var.aws_rds_password
+  sensitive = true
+}
+
+output "db_endpoint" {
+  value = aws_rds_cluster_instance.aws_rds_cluster_instance[0].endpoint
+}
+
+output "rancher_url" {
+  value = aws_route53_record.aws_route53_record.fqdn
+}
+
+
+
 
 output "instance_public_ip" {
   value = [for instance in aws_instance.aws_instance : "public IP for rke config: ${instance.public_ip}"]
