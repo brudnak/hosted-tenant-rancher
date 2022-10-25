@@ -2,9 +2,9 @@ package test
 
 import (
 	"fmt"
+	"os"
 
 	"log"
-	"strings"
 	"testing"
 
 	"github.com/brudnak/hosted-tenant-rancher/util"
@@ -37,22 +37,30 @@ func TestHostInfrastructureCreate(t *testing.T) {
 	rancherURL = terraform.Output(t, terraformOptions, "rancher_url")
 
 	validatedFirstIP := util.CheckIPAddress(firstPublicIP)
+	validatedSecondIP := util.CheckIPAddress(secondPlublicIP)
 
 	assert.Equal(t, "valid", validatedFirstIP)
+	assert.Equal(t, "valid", validatedSecondIP)
 
 	firstServerCommand := fmt.Sprintf(`curl -sfL https://get.k3s.io | sh -s - server --token=SECRET --datastore-endpoint='mysql://tfadmin:%s@tcp(%s)/k3s' --tls-san %s --node-external-ip %s`, dataStorePassword, dataStoreEndpoint, rancherURL, firstPublicIP)
 
 	var _ = util.RunCommand(firstServerCommand, firstPublicIP)
 
 	token := util.RunCommand("sudo cat /var/lib/rancher/k3s/server/token", firstPublicIP)
-	token = strings.TrimRight(token, "\r\n")
-
 	serverKubeConfig := util.RunCommand("sudo cat /etc/rancher/k3s/k3s.yaml", firstPublicIP)
 	log.Println(serverKubeConfig)
 
 	secondServerCommand := fmt.Sprintf(`curl -sfL https://get.k3s.io | sh -s - server --token=%s --datastore-endpoint='mysql://tfadmin:%s@tcp(%s)/k3s' --tls-san %s --node-external-ip %s`, token, dataStorePassword, dataStoreEndpoint, rancherURL, secondPlublicIP)
 	var _ = util.RunCommand(secondServerCommand, secondPlublicIP)
 
+	actualNodeCount := util.RunCommand("sudo k3s kubectl get nodes | wc -l", firstPublicIP)
+	assert.Equal(t, "2", actualNodeCount)
+
+	kubeConf := []byte(serverKubeConfig)
+	err := os.WriteFile("../config/kube_config.yml", kubeConf, 0644)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func TestHostCleanup(t *testing.T) {

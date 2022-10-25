@@ -3,10 +3,12 @@ package util
 import (
 	"bytes"
 	"fmt"
+	"github.com/spf13/viper"
 	"golang.org/x/crypto/ssh"
 	"io/ioutil"
 	"log"
 	"net"
+	"strings"
 )
 
 func CheckIPAddress(ip string) string {
@@ -19,9 +21,16 @@ func CheckIPAddress(ip string) string {
 
 func RunCommand(cmd string, pubIP string) string {
 
+	viper.AddConfigPath("../config")
+	viper.SetConfigName("config")
+	viper.SetConfigType("yml")
+	viper.ReadInConfig()
+
+	path := viper.GetString("local.pem_path")
+
 	dialIP := fmt.Sprintf("%s:22", pubIP)
 
-	pemBytes, err := ioutil.ReadFile("")
+	pemBytes, err := ioutil.ReadFile(path)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -52,6 +61,8 @@ func RunCommand(cmd string, pubIP string) string {
 	}
 
 	stringOut := stdoutBuf.String()
+
+	stringOut = strings.TrimRight(stringOut, "\r\n")
 
 	return stringOut
 }

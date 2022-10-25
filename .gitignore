@@ -314,4 +314,4 @@ terraform.tfstate*
 var.auto.tfvars
 *.tfvars
 
-*config
+config
