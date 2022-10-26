@@ -9,7 +9,7 @@ terraform {
 
 provider "helm" {
   kubernetes {
-    config_path = "../../config/kube_config.yml"
+    config_path = "../../../../kube/config/tenant.yml"
   }
 }
 

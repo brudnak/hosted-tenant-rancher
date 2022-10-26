@@ -21,7 +21,7 @@ func CheckIPAddress(ip string) string {
 
 func RunCommand(cmd string, pubIP string) string {
 
-	viper.AddConfigPath("../config")
+	viper.AddConfigPath("../../config")
 	viper.SetConfigName("config")
 	viper.SetConfigType("yml")
 	viper.ReadInConfig()
