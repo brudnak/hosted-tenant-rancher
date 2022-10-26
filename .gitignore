@@ -38,9 +38,9 @@
 # .idea/artifacts
 # .idea/compiler.xml
 # .idea/jarRepositories.xml
-# .idea/basetf.xml
+# .idea/modules.xml
 # .idea/*.iml
-# .idea/basetf
+# .idea/modules
 # *.iml
 # *.ipr
 
@@ -84,7 +84,7 @@ fabric.properties
 # Comment Reason: https://github.com/joeblau/gitignore.io/issues/186#issuecomment-215987721
 
 # *.iml
-# basetf.xml
+# modules.xml
 # .idea/misc.xml
 # *.ipr
 
