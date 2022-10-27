@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/gruntwork-io/terratest/modules/terraform"
 	"github.com/stretchr/testify/assert"
@@ -49,8 +50,14 @@ func TestHostInfrastructureCreate(t *testing.T) {
 	assert.Equal(t, expectedNodeCount, actualHostNodeCount)
 	assert.Equal(t, expectedNodeCount, actualTenantNodeCount)
 
-	t.Run("install rancher", TestInstallHostRancher)
+	t.Run("install host rancher", TestInstallHostRancher)
+
+	time.Sleep(30 * time.Second)
+
+	t.Run("install tenant rancher", TestInstallTenantRancher)
+
 	log.Println("Rancher url", infra1RancherURL)
+	log.Println("Rancher url", infra2RancherURL)
 }
 
 func TestInstallHostRancher(t *testing.T) {
@@ -58,6 +65,17 @@ func TestInstallHostRancher(t *testing.T) {
 	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
 
 		TerraformDir: "../modules/helm/host",
+		NoColor:      true,
+	})
+
+	terraform.InitAndApply(t, terraformOptions)
+}
+
+func TestInstallTenantRancher(t *testing.T) {
+
+	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
+
+		TerraformDir: "../modules/helm/tenant",
 		NoColor:      true,
 	})
 
