@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"crypto/rand"
 	"fmt"
-	"github.com/brudnak/hosted-tenant-rancher/terratest/util"
-	"github.com/spf13/viper"
 	"log"
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/brudnak/hosted-tenant-rancher/terratest/util"
+	"github.com/spf13/viper"
 )
 
 const randomStringSource = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$%^&*"
@@ -27,8 +28,15 @@ func (t *Tools) RandomString(n int) string {
 }
 
 func (t *Tools) SetupK3S(mysqlPassword string, mysqlEndpoint string, rancherURL string, node1IP string, node2IP string, rancherType string) int {
-	log.Println("STARTING TOOLS CALL")
-	nodeOneCommand := fmt.Sprintf(`curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='v1.23.13+k3s1' sh -s - server --token=SECRET --datastore-endpoint='mysql://tfadmin:%s@tcp(%s)/k3s' --tls-san %s --node-external-ip %s`, mysqlPassword, mysqlEndpoint, rancherURL, node1IP)
+
+	viper.AddConfigPath("../config")
+	viper.SetConfigName("config")
+	viper.SetConfigType("yml")
+	viper.ReadInConfig()
+
+	k3sVersion := viper.GetString("k3s.version")
+
+	nodeOneCommand := fmt.Sprintf(`curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='%s' sh -s - server --token=SECRET --datastore-endpoint='mysql://tfadmin:%s@tcp(%s)/k3s' --tls-san %s --node-external-ip %s`, k3sVersion, mysqlPassword, mysqlEndpoint, rancherURL, node1IP)
 
 	var _ = util.RunCommand(nodeOneCommand, node1IP)
 
@@ -37,7 +45,7 @@ func (t *Tools) SetupK3S(mysqlPassword string, mysqlEndpoint string, rancherURL 
 
 	time.Sleep(10 * time.Second)
 
-	nodeTwoCommand := fmt.Sprintf(`curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='v1.23.13+k3s1' sh -s - server --token=%s --datastore-endpoint='mysql://tfadmin:%s@tcp(%s)/k3s' --tls-san %s --node-external-ip %s`, token, mysqlPassword, mysqlEndpoint, rancherURL, node2IP)
+	nodeTwoCommand := fmt.Sprintf(`curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='%s' sh -s - server --token=%s --datastore-endpoint='mysql://tfadmin:%s@tcp(%s)/k3s' --tls-san %s --node-external-ip %s`, k3sVersion, token, mysqlPassword, mysqlEndpoint, rancherURL, node2IP)
 	var _ = util.RunCommand(nodeTwoCommand, node2IP)
 
 	time.Sleep(10 * time.Second)
@@ -55,7 +63,6 @@ func (t *Tools) SetupK3S(mysqlPassword string, mysqlEndpoint string, rancherURL 
 	configIP := fmt.Sprintf("https://%s:6443", node1IP)
 	output := bytes.Replace(kubeConf, []byte("https://127.0.0.1:6443"), []byte(configIP), -1)
 
-	log.Println("about to write kubeconfig")
 	if rancherType == "host" {
 		err = os.WriteFile("../../kube/config/host.yml", output, 0644)
 		if err != nil {
@@ -69,11 +76,6 @@ func (t *Tools) SetupK3S(mysqlPassword string, mysqlEndpoint string, rancherURL 
 	} else {
 		log.Fatal("expecting either host or tenant for rancher type")
 	}
-
-	viper.AddConfigPath("../config")
-	viper.SetConfigName("config")
-	viper.SetConfigType("yml")
-	viper.ReadInConfig()
 
 	tfvarFile := fmt.Sprintf("rancher_url = \"%s\"\nbootstrap_password = \"%s\"\nemail = \"%s\"\nrancher_version = \"%s\"", rancherURL, viper.GetString("rancher.bootstrap_password"), viper.GetString("rancher.email"), viper.GetString("rancher.version"))
 	tfvarFileBytes := []byte(tfvarFile)
