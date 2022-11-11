@@ -5,15 +5,17 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"golang.org/x/crypto/ssh"
 	"io"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
-	"github.com/brudnak/hosted-tenant-rancher/terratest/util"
 	"github.com/spf13/viper"
 )
 
@@ -37,19 +39,19 @@ func (t *Tools) SetupK3S(mysqlPassword string, mysqlEndpoint string, rancherURL 
 
 	nodeOneCommand := fmt.Sprintf(`curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='%s' sh -s - server --token=SECRET --datastore-endpoint='mysql://tfadmin:%s@tcp(%s)/k3s' --tls-san %s --node-external-ip %s`, k3sVersion, mysqlPassword, mysqlEndpoint, rancherURL, node1IP)
 
-	var _ = util.RunCommand(nodeOneCommand, node1IP)
+	var _ = t.RunCommand(nodeOneCommand, node1IP)
 
-	token := util.RunCommand("sudo cat /var/lib/rancher/k3s/server/token", node1IP)
-	serverKubeConfig := util.RunCommand("sudo cat /etc/rancher/k3s/k3s.yaml", node1IP)
+	token := t.RunCommand("sudo cat /var/lib/rancher/k3s/server/token", node1IP)
+	serverKubeConfig := t.RunCommand("sudo cat /etc/rancher/k3s/k3s.yaml", node1IP)
 
 	time.Sleep(10 * time.Second)
 
 	nodeTwoCommand := fmt.Sprintf(`curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='%s' sh -s - server --token=%s --datastore-endpoint='mysql://tfadmin:%s@tcp(%s)/k3s' --tls-san %s --node-external-ip %s`, k3sVersion, token, mysqlPassword, mysqlEndpoint, rancherURL, node2IP)
-	var _ = util.RunCommand(nodeTwoCommand, node2IP)
+	var _ = t.RunCommand(nodeTwoCommand, node2IP)
 
 	time.Sleep(10 * time.Second)
 
-	wcResponse := util.RunCommand("sudo k3s kubectl get nodes | wc -l", node1IP)
+	wcResponse := t.RunCommand("sudo k3s kubectl get nodes | wc -l", node1IP)
 	actualNodeCount, err := strconv.Atoi(wcResponse)
 	actualNodeCount = actualNodeCount - 1
 
@@ -166,4 +168,56 @@ func (t *Tools) CreateToken(password string, url string) string {
 	json.Unmarshal(tokenBytes, &tokenRes)
 
 	return tokenRes.Token
+}
+
+func (t *Tools) RunCommand(cmd string, pubIP string) string {
+
+	path := viper.GetString("local.pem_path")
+
+	dialIP := fmt.Sprintf("%s:22", pubIP)
+
+	pemBytes, err := ioutil.ReadFile(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	signer, err := ssh.ParsePrivateKey(pemBytes)
+	if err != nil {
+		log.Fatalf("parse key failed:%v", err)
+	}
+	config := &ssh.ClientConfig{
+		User:            "ubuntu",
+		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signer)},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+	}
+	conn, err := ssh.Dial("tcp", dialIP, config)
+	if err != nil {
+		log.Fatalf("dial failed:%v", err)
+	}
+	defer conn.Close()
+	session, err := conn.NewSession()
+	if err != nil {
+		log.Fatalf("session failed:%v", err)
+	}
+	defer session.Close()
+	var stdoutBuf bytes.Buffer
+	session.Stdout = &stdoutBuf
+	err = session.Run(cmd)
+	if err != nil {
+		log.Fatalf("Run failed:%v", err)
+	}
+
+	stringOut := stdoutBuf.String()
+
+	stringOut = strings.TrimRight(stringOut, "\r\n")
+
+	return stringOut
+}
+
+func (t *Tools) CheckIPAddress(ip string) string {
+	if net.ParseIP(ip) == nil {
+		return "invalid"
+	} else {
+		return "valid"
+	}
 }

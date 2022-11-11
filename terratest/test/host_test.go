@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brudnak/hosted-tenant-rancher/terratest/util"
 	toolkit "github.com/brudnak/hosted-tenant-rancher/tools"
 	"github.com/spf13/viper"
 
@@ -23,6 +22,8 @@ func TestHostInfrastructureCreate(t *testing.T) {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yml")
 	viper.ReadInConfig()
+
+	var tools toolkit.Tools
 
 	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
 
@@ -44,13 +45,11 @@ func TestHostInfrastructureCreate(t *testing.T) {
 	infra2MysqlPassword := terraform.Output(t, terraformOptions, "infra2_mysql_password")
 	infra2RancherURL := terraform.Output(t, terraformOptions, "infra2_rancher_url")
 
-	noneOneIPAddressValidationResult := util.CheckIPAddress(infra1Server1IPAddress)
-	nodeTwoIPAddressValidationResult := util.CheckIPAddress(infra1Server2IPAddress)
+	noneOneIPAddressValidationResult := tools.CheckIPAddress(infra1Server1IPAddress)
+	nodeTwoIPAddressValidationResult := tools.CheckIPAddress(infra1Server2IPAddress)
 
 	assert.Equal(t, "valid", noneOneIPAddressValidationResult)
 	assert.Equal(t, "valid", nodeTwoIPAddressValidationResult)
-
-	var tools toolkit.Tools
 
 	actualHostNodeCount := tools.SetupK3S(infra1MysqlPassword, infra1MysqlEndpoint, infra1RancherURL, infra1Server1IPAddress, infra1Server2IPAddress, "host")
 	actualTenantNodeCount := tools.SetupK3S(infra2MysqlPassword, infra2MysqlEndpoint, infra2RancherURL, infra2Server1IPAddress, infra2Server2IPAddress, "tenant")
