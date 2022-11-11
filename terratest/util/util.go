@@ -21,11 +21,6 @@ func CheckIPAddress(ip string) string {
 
 func RunCommand(cmd string, pubIP string) string {
 
-	viper.AddConfigPath("../../config")
-	viper.SetConfigName("config")
-	viper.SetConfigType("yml")
-	viper.ReadInConfig()
-
 	path := viper.GetString("local.pem_path")
 
 	dialIP := fmt.Sprintf("%s:22", pubIP)
@@ -34,6 +29,7 @@ func RunCommand(cmd string, pubIP string) string {
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	signer, err := ssh.ParsePrivateKey(pemBytes)
 	if err != nil {
 		log.Fatalf("parse key failed:%v", err)

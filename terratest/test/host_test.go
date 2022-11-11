@@ -1,18 +1,28 @@
 package test
 
 import (
-	"github.com/brudnak/hosted-tenant-rancher/terratest/util"
-	toolkit "github.com/brudnak/hosted-tenant-rancher/tools"
 	"log"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/brudnak/hosted-tenant-rancher/terratest/util"
+	toolkit "github.com/brudnak/hosted-tenant-rancher/tools"
+	"github.com/spf13/viper"
+
 	"github.com/gruntwork-io/terratest/modules/terraform"
 	"github.com/stretchr/testify/assert"
 )
 
+var hostUrl string
+var password string
+
 func TestHostInfrastructureCreate(t *testing.T) {
+
+	viper.AddConfigPath("../../config")
+	viper.SetConfigName("config")
+	viper.SetConfigType("yml")
+	viper.ReadInConfig()
 
 	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
 
@@ -52,10 +62,14 @@ func TestHostInfrastructureCreate(t *testing.T) {
 
 	t.Run("install host rancher", TestInstallHostRancher)
 
+	hostUrl = infra1RancherURL
+	password = viper.GetString("rancher.bootstrap_password")
+
 	time.Sleep(30 * time.Second)
 
-	t.Run("install tenant rancher", TestInstallTenantRancher)
+	t.Run("Importing k3s cluster into Rancher", TestCreateImportedCluster)
 
+	// t.Run("install tenant rancher", TestInstallTenantRancher)
 	log.Println("Rancher url", infra1RancherURL)
 	log.Println("Rancher url", infra2RancherURL)
 }
@@ -69,6 +83,12 @@ func TestInstallHostRancher(t *testing.T) {
 	})
 
 	terraform.InitAndApply(t, terraformOptions)
+}
+
+func TestCreateImportedCluster(t *testing.T) {
+	var tools toolkit.Tools
+	adminToken := tools.CreateToken(hostUrl, password)
+	log.Println(adminToken)
 }
 
 func TestInstallTenantRancher(t *testing.T) {

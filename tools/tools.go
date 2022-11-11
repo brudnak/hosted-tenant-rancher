@@ -3,8 +3,12 @@ package toolkit
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"strconv"
 	"time"
@@ -13,7 +17,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-const randomStringSource = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$%^&*"
+const randomStringSource = "abcdefghijklmnopqrstuvwxyz"
 
 type Tools struct{}
 
@@ -28,11 +32,6 @@ func (t *Tools) RandomString(n int) string {
 }
 
 func (t *Tools) SetupK3S(mysqlPassword string, mysqlEndpoint string, rancherURL string, node1IP string, node2IP string, rancherType string) int {
-
-	viper.AddConfigPath("../config")
-	viper.SetConfigName("config")
-	viper.SetConfigType("yml")
-	viper.ReadInConfig()
 
 	k3sVersion := viper.GetString("k3s.version")
 
@@ -97,4 +96,74 @@ func (t *Tools) SetupK3S(mysqlPassword string, mysqlEndpoint string, rancherURL 
 	}
 
 	return actualNodeCount
+}
+
+func (t *Tools) CreateToken(password string, url string) string {
+
+	loginPayload := LoginPayload{
+		Description:  t.RandomString(6),
+		ResponseType: "token",
+		Username:     "admin",
+		Password:     password,
+	}
+
+	loginBody, err := json.Marshal(loginPayload)
+
+	if err != nil {
+		log.Println(err)
+	}
+
+	adminLogin := fmt.Sprintf("%s/v3-public/localProviders/local?action=login", url)
+	resp, err := http.Post(adminLogin, "application/jsona", bytes.NewBuffer(loginBody))
+
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Println(err)
+	}
+
+	var loginResp LoginResponse
+	json.Unmarshal(b, &loginResp)
+
+	client := &http.Client{
+		Timeout: time.Second * 10,
+	}
+
+	tokenBody := TokenBody{
+		Type:        "token",
+		Metadata:    struct{}{},
+		Description: "ADMIN_TOKEN",
+		TTL:         0,
+	}
+
+	jsonTokenBody, err := json.Marshal(tokenBody)
+	if err != nil {
+		log.Println(err)
+	}
+
+	tokenUrl := fmt.Sprintf("%s/v3/tokens", url)
+	req, err := http.NewRequest("POST", tokenUrl, bytes.NewBuffer(jsonTokenBody))
+
+	if err != nil {
+		log.Println(err)
+	}
+
+	bearer := fmt.Sprintf("Bearer %s", loginResp.Token)
+
+	req.Header.Set("Authorization", bearer)
+
+	response, err := client.Do(req)
+	if err != nil {
+		log.Println(err)
+	}
+	defer response.Body.Close()
+
+	tokenBytes, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		log.Println(err)
+	}
+
+	var tokenRes TokenResponse
+	json.Unmarshal(tokenBytes, &tokenRes)
+
+	return tokenRes.Token
 }
