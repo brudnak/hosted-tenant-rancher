@@ -21,7 +21,11 @@ func TestHostInfrastructureCreate(t *testing.T) {
 	viper.AddConfigPath("../../config")
 	viper.SetConfigName("config")
 	viper.SetConfigType("yml")
-	viper.ReadInConfig()
+	err := viper.ReadInConfig()
+
+	if err != nil {
+		log.Println("error reading config:", err)
+	}
 
 	var tools toolkit.Tools
 
