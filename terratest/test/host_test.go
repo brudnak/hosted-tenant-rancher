@@ -90,7 +90,7 @@ func TestInstallHostRancher(t *testing.T) {
 
 func TestCreateImportedCluster(t *testing.T) {
 	var tools toolkit.Tools
-	adminToken := tools.CreateToken(hostUrl, password)
+	adminToken := tools.CreateToken(password, hostUrl)
 	log.Println(adminToken)
 }
 

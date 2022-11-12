@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"golang.org/x/crypto/ssh"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -115,8 +114,12 @@ func (t *Tools) CreateToken(password string, url string) string {
 		log.Println(err)
 	}
 
-	adminLogin := fmt.Sprintf("%s/v3-public/localProviders/local?action=login", url)
-	resp, err := http.Post(adminLogin, "application/jsona", bytes.NewBuffer(loginBody))
+	adminLogin := fmt.Sprintf("https://%s/v3-public/localProviders/local?action=login", url)
+	resp, err := http.Post(adminLogin, "application/json", bytes.NewBuffer(loginBody))
+
+	if resp == nil {
+		log.Println("response was nil")
+	}
 
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -124,7 +127,11 @@ func (t *Tools) CreateToken(password string, url string) string {
 	}
 
 	var loginResp LoginResponse
-	json.Unmarshal(b, &loginResp)
+	err = json.Unmarshal(b, &loginResp)
+
+	if err != nil {
+		log.Println(err)
+	}
 
 	client := &http.Client{
 		Timeout: time.Second * 10,
@@ -142,7 +149,7 @@ func (t *Tools) CreateToken(password string, url string) string {
 		log.Println(err)
 	}
 
-	tokenUrl := fmt.Sprintf("%s/v3/tokens", url)
+	tokenUrl := fmt.Sprintf("https://%s/v3/tokens", url)
 	req, err := http.NewRequest("POST", tokenUrl, bytes.NewBuffer(jsonTokenBody))
 
 	if err != nil {
@@ -157,15 +164,24 @@ func (t *Tools) CreateToken(password string, url string) string {
 	if err != nil {
 		log.Println(err)
 	}
-	defer response.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			log.Println(err)
+		}
+	}(response.Body)
 
-	tokenBytes, err := ioutil.ReadAll(response.Body)
+	tokenBytes, err := io.ReadAll(response.Body)
 	if err != nil {
 		log.Println(err)
 	}
 
 	var tokenRes TokenResponse
-	json.Unmarshal(tokenBytes, &tokenRes)
+	err = json.Unmarshal(tokenBytes, &tokenRes)
+
+	if err != nil {
+		log.Println(err)
+	}
 
 	return tokenRes.Token
 }
@@ -176,7 +192,7 @@ func (t *Tools) RunCommand(cmd string, pubIP string) string {
 
 	dialIP := fmt.Sprintf("%s:22", pubIP)
 
-	pemBytes, err := ioutil.ReadFile(path)
+	pemBytes, err := os.ReadFile(path)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -194,12 +210,22 @@ func (t *Tools) RunCommand(cmd string, pubIP string) string {
 	if err != nil {
 		log.Fatalf("dial failed:%v", err)
 	}
-	defer conn.Close()
+	defer func(conn *ssh.Client) {
+		err := conn.Close()
+		if err != nil {
+			log.Println(err)
+		}
+	}(conn)
 	session, err := conn.NewSession()
 	if err != nil {
 		log.Fatalf("session failed:%v", err)
 	}
-	defer session.Close()
+	defer func(session *ssh.Session) {
+		err := session.Close()
+		if err != nil {
+			log.Println(err)
+		}
+	}(session)
 	var stdoutBuf bytes.Buffer
 	session.Stdout = &stdoutBuf
 	err = session.Run(cmd)
