@@ -41,6 +41,11 @@ resource "helm_release" "rancher" {
   }
 
   set {
+    name  = "rancherImageTag"
+    value = "v2.7-head"
+  }
+
+  set {
     name  = "bootstrapPassword"
     value = var.bootstrap_password
   }
