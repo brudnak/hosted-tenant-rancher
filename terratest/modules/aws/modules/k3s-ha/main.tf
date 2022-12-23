@@ -27,7 +27,7 @@ provider "aws" {
 resource "aws_instance" "aws_instance" {
   count                  = 2
   ami                    = var.aws_ami
-  instance_type          = "m5.2xlarge"
+  instance_type          = "m5.large"
   subnet_id              = var.aws_subnet_id
   vpc_security_group_ids = [var.aws_security_group_id]
   key_name               = var.aws_pem_key_name
@@ -35,22 +35,18 @@ resource "aws_instance" "aws_instance" {
   root_block_device {
     volume_size = 200
     tags = {
-      Name = "${random_pet.random_pet.keepers.aws_prefix}-${random_pet.random_pet.id}${formatdate("MMMDDYY", timestamp())}"
-      DoNotDelete = "True"
-      Owner = "${var.aws_prefix}-terraform"
+      Name = "${random_pet.random_pet.keepers.aws_prefix}-${random_pet.random_pet.id}"
     }
   }
 
   tags = {
-    Name = "${random_pet.random_pet.keepers.aws_prefix}-${random_pet.random_pet.id}${formatdate("MMMDDYY", timestamp())}"
-    DoNotDelete = "True"
-    Owner = "${var.aws_prefix}-terraform"
+    Name = "${random_pet.random_pet.keepers.aws_prefix}-${random_pet.random_pet.id}"
   }
 }
 
 
 resource "aws_lb_target_group" "aws_lb_target_group_80" {
-  name        = "${var.aws_prefix}-80-${random_pet.random_pet.id}${formatdate("MMMDDYY", timestamp())}"
+  name        = "${var.aws_prefix}-80-${random_pet.random_pet.id}"
   port        = 80
   protocol    = "TCP"
   target_type = "instance"
@@ -64,7 +60,7 @@ resource "aws_lb_target_group" "aws_lb_target_group_80" {
 }
 
 resource "aws_lb_target_group" "aws_lb_target_group_443" {
-  name        = "${var.aws_prefix}-443-${random_pet.random_pet.id}${formatdate("MMMDDYY", timestamp())}"
+  name        = "${var.aws_prefix}-443-${random_pet.random_pet.id}"
   port        = 443
   protocol    = "TCP"
   target_type = "instance"
@@ -97,7 +93,7 @@ resource "aws_lb_target_group_attachment" "attach_tg_443" {
 # create a load balancer
 resource "aws_lb" "aws_lb" {
   load_balancer_type = "network"
-  name               = "${var.aws_prefix}-nlb-${random_pet.random_pet.id}${formatdate("MMMDDYY", timestamp())}"
+  name               = "${var.aws_prefix}-nlb-${random_pet.random_pet.id}"
   internal           = false
   ip_address_type    = "ipv4"
   subnets            = [var.aws_subnet_a, var.aws_subnet_b, var.aws_subnet_c]
@@ -144,7 +140,7 @@ resource "aws_rds_cluster_instance" "aws_rds_cluster_instance" {
   count              = 1
   identifier         = "${var.aws_prefix}-${random_pet.random_pet_rds.id}-${count.index}"
   cluster_identifier = aws_rds_cluster.aws_rds_cluster.id
-  instance_class     = "db.r6g.2xlarge"
+  instance_class     = "db.t4g.large"
   engine             = aws_rds_cluster.aws_rds_cluster.engine
   engine_version     = aws_rds_cluster.aws_rds_cluster.engine_version
 }

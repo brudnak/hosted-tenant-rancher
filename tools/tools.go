@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"github.com/brudnak/hosted-tenant-rancher/tools/hcl"
 	"golang.org/x/crypto/ssh"
 	"io"
 	"log"
@@ -32,7 +33,7 @@ func (t *Tools) RandomString(n int) string {
 	return string(s)
 }
 
-func (t *Tools) SetupK3S(mysqlPassword string, mysqlEndpoint string, rancherURL string, node1IP string, node2IP string, rancherType string) int {
+func (t *Tools) SetupK3S(mysqlPassword string, mysqlEndpoint string, rancherURL string, node1IP string, node2IP string, rancherType string) (int, string) {
 
 	k3sVersion := viper.GetString("k3s.version")
 
@@ -64,12 +65,16 @@ func (t *Tools) SetupK3S(mysqlPassword string, mysqlEndpoint string, rancherURL 
 	output := bytes.Replace(kubeConf, []byte("https://127.0.0.1:6443"), []byte(configIP), -1)
 
 	if rancherType == "host" {
-		err = os.WriteFile("../../kube/config/host.yml", output, 0644)
+		err = os.WriteFile("../../host.yml", output, 0644)
 		if err != nil {
 			log.Println("failed creating host config:", err)
 		}
 	} else if rancherType == "tenant" {
-		err = os.WriteFile("../../kube/config/tenant.yml", output, 0644)
+		err = os.WriteFile("../../tenant.yml", output, 0644)
+		if err != nil {
+			log.Println("failed creating tenant config:", err)
+		}
+		err = os.WriteFile("../../terratest/modules/kubectl/theconfig.yml", output, 0644)
 		if err != nil {
 			log.Println("failed creating tenant config:", err)
 		}
@@ -77,7 +82,7 @@ func (t *Tools) SetupK3S(mysqlPassword string, mysqlEndpoint string, rancherURL 
 		log.Fatal("expecting either host or tenant for rancher type")
 	}
 
-	tfvarFile := fmt.Sprintf("rancher_url = \"%s\"\nbootstrap_password = \"%s\"\nemail = \"%s\"\nrancher_version = \"%s\"", rancherURL, viper.GetString("rancher.bootstrap_password"), viper.GetString("rancher.email"), viper.GetString("rancher.version"))
+	tfvarFile := fmt.Sprintf("rancher_url = \"%s\"\nbootstrap_password = \"%s\"\nemail = \"%s\"\nrancher_version = \"%s\"\nimage_tag = \"%s\"", rancherURL, viper.GetString("rancher.bootstrap_password"), viper.GetString("rancher.email"), viper.GetString("rancher.version"), viper.GetString("rancher.image_tag"))
 	tfvarFileBytes := []byte(tfvarFile)
 
 	if rancherType == "host" {
@@ -96,10 +101,10 @@ func (t *Tools) SetupK3S(mysqlPassword string, mysqlEndpoint string, rancherURL 
 		log.Fatal("expecting either host or tenant for rancher type")
 	}
 
-	return actualNodeCount
+	return actualNodeCount, configIP
 }
 
-func (t *Tools) CreateToken(password string, url string) string {
+func (t *Tools) CreateToken(url string, password string) string {
 
 	loginPayload := LoginPayload{
 		Description:  t.RandomString(6),
@@ -245,5 +250,125 @@ func (t *Tools) CheckIPAddress(ip string) string {
 		return "invalid"
 	} else {
 		return "valid"
+	}
+}
+
+func (t *Tools) RemoveFile(filePath string) {
+	err := os.Remove(filePath)
+	if err != nil {
+		log.Println(err)
+	}
+}
+
+func (t *Tools) RemoveFolder(folderPath string) {
+	err := os.RemoveAll(folderPath)
+	if err != nil {
+		log.Println(err)
+	}
+}
+
+func (t *Tools) CreateImport(url string, token string) {
+
+	impPay := ImportPayload{
+		Type: "provisioning.cattle.io.cluster",
+		Metadata: struct {
+			Namespace string `json:"namespace"`
+			Name      string `json:"name"`
+		}{
+			Namespace: "fleet-default",
+			Name:      "tenant",
+		},
+		Spec: struct{}{},
+	}
+
+	importBody, err := json.Marshal(impPay)
+	if err != nil {
+		log.Println(err)
+	}
+
+	client := &http.Client{
+		Timeout: time.Second * 10,
+	}
+
+	importUrl := fmt.Sprintf("https://%s/v1/provisioning.cattle.io.clusters", url)
+	req, err := http.NewRequest("POST", importUrl, bytes.NewBuffer(importBody))
+
+	if err != nil {
+		log.Println(err)
+	}
+
+	bearer := fmt.Sprintf("Bearer %s", token)
+
+	req.Header.Set("Authorization", bearer)
+
+	response, err := client.Do(req)
+	if err != nil {
+		log.Println(err)
+	}
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			log.Println(err)
+		}
+	}(response.Body)
+}
+
+func (t *Tools) GetManifestUrl(url string, token string) string {
+
+	client := &http.Client{
+		Timeout: time.Second * 10,
+	}
+
+	registrationUrl := fmt.Sprintf("https://%s/v3/clusterregistrationtokens", url)
+	req, err := http.NewRequest("GET", registrationUrl, nil)
+
+	if err != nil {
+		log.Println(err)
+	}
+
+	bearer := fmt.Sprintf("Bearer %s", token)
+
+	req.Header.Set("Authorization", bearer)
+
+	response, err := client.Do(req)
+	if err != nil {
+		log.Println(err)
+	}
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			log.Println(err)
+		}
+	}(response.Body)
+
+	registrationBytes, err := io.ReadAll(response.Body)
+	if err != nil {
+		log.Println(err)
+	}
+
+	var regResponse RegistrationResponse
+	err = json.Unmarshal(registrationBytes, &regResponse)
+
+	if err != nil {
+		log.Println(err)
+	}
+
+	log.Println("LOOK HERE:", regResponse.Data[0].ManifestURL)
+
+	return regResponse.Data[0].ManifestURL
+}
+
+func (t *Tools) SetupImport(url string, password string, ip string) {
+
+	adminToken := t.CreateToken(url, password)
+	t.CreateImport(url, adminToken)
+	time.Sleep(time.Second * 30)
+	manifestUrl := t.GetManifestUrl(url, adminToken)
+	hcl.GenerateKubectlTfVar(ip, manifestUrl)
+	err := os.Setenv("KUBECONFIG", "theconfig.yml")
+
+	if err != nil {
+		fmt.Println("error setup import:", err)
+		return
 	}
 }

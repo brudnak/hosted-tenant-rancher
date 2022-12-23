@@ -9,7 +9,7 @@ terraform {
 
 provider "helm" {
   kubernetes {
-    config_path = "../../../../kube/config/tenant.yml"
+    config_path = "../../../../tenant.yml"
   }
 }
 
@@ -42,7 +42,7 @@ resource "helm_release" "rancher" {
 
   set {
     name  = "rancherImageTag"
-    value = "v2.7-head"
+    value = var.image_tag
   }
 
   set {
@@ -64,12 +64,6 @@ resource "helm_release" "rancher" {
     name  = "letsEncrypt.ingress.class"
     value = "traefik"
   }
-
-  # if a rancherImageTag is used (not a chart) then set parameter for rancherImageTag needs to be uncommented and specified
-  # set {
-  #   name  = "rancherImageTag"
-  #   value = var.rancher_tag_version
-  # }
 
   # wait for certs to be installed first
   depends_on = [

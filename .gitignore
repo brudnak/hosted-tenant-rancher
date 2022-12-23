@@ -31,10 +31,10 @@
 .idea/**/gradle.xml
 .idea/**/libraries
 
-# Gradle and Maven with auto-import
-# When using Gradle or Maven with auto-import, you should exclude module files,
+# Gradle and Maven with auto-rancher
+# When using Gradle or Maven with auto-rancher, you should exclude module files,
 # since they will be recreated, and may cause churn.  Uncomment if using
-# auto-import.
+# auto-rancher.
 # .idea/artifacts
 # .idea/compiler.xml
 # .idea/jarRepositories.xml
@@ -312,6 +312,8 @@ $RECYCLE.BIN/
 terraform.tfstate*
 .idea
 var.auto.tfvars
-*.tfvars
-
 config
+config.yml
+host.yml
+tenant.yml
+theconfig.yml
