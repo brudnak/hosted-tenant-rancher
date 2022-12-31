@@ -1,13 +1,11 @@
 package test
 
 import (
+	toolkit "github.com/brudnak/hosted-tenant-rancher/tools"
+	"github.com/spf13/viper"
 	"log"
 	"os"
 	"testing"
-	"time"
-
-	toolkit "github.com/brudnak/hosted-tenant-rancher/tools"
-	"github.com/spf13/viper"
 
 	"github.com/gruntwork-io/terratest/modules/terraform"
 	"github.com/stretchr/testify/assert"
@@ -71,13 +69,11 @@ func TestHostInfrastructureCreate(t *testing.T) {
 	hostUrl = infra1RancherURL
 	password = viper.GetString("rancher.bootstrap_password")
 
-	time.Sleep(30 * time.Second)
-
-	//t.Run("setup rancher import", TestSetupImport)
+	t.Run("setup rancher import", TestSetupImport)
 	t.Run("install tenant rancher", TestInstallTenantRancher)
 
-	log.Println("Rancher url", infra1RancherURL)
-	log.Println("Rancher url", infra2RancherURL)
+	log.Printf("Host Rancher https://%s", infra1RancherURL)
+	log.Printf("Tenant Rancher https://%s", infra2RancherURL)
 }
 
 func TestInstallHostRancher(t *testing.T) {
@@ -93,6 +89,8 @@ func TestInstallHostRancher(t *testing.T) {
 
 func TestSetupImport(t *testing.T) {
 	var tools toolkit.Tools
+
+	tools.WorkAround(hostUrl, password)
 	tools.SetupImport(hostUrl, password, configIp)
 
 	err := os.Setenv("KUBECONFIG", "theconfig.yml")

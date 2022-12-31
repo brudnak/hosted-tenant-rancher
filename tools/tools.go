@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/brudnak/hosted-tenant-rancher/tools/hcl"
+	"github.com/go-rod/rod"
 	"golang.org/x/crypto/ssh"
 	"io"
 	"log"
@@ -276,7 +277,7 @@ func (t *Tools) CreateImport(url string, token string) {
 			Name      string `json:"name"`
 		}{
 			Namespace: "fleet-default",
-			Name:      "tenant",
+			Name:      "imported-tenant",
 		},
 		Spec: struct{}{},
 	}
@@ -356,6 +357,24 @@ func (t *Tools) GetManifestUrl(url string, token string) string {
 	log.Println("LOOK HERE:", regResponse.Data[0].ManifestURL)
 
 	return regResponse.Data[0].ManifestURL
+}
+
+func (t *Tools) WorkAround(url, password string) {
+
+	loginUrl := fmt.Sprintf("https://%s/dashboard/auth/login", url)
+
+	browser := rod.New().MustConnect().NoDefaultDevice()
+	page := browser.MustPage(loginUrl).MustWindowFullscreen()
+
+	page.MustElement("#password > div > input[type=password]").MustInput(password)
+	page.MustElement("#submit").MustClick()
+	time.Sleep(5 * time.Second)
+
+	page.MustElement("#__layout > main > div > form > div > div.col.span-6.form-col > div:nth-child(2) > div.checkbox.mt-40 > div > label > span.checkbox-label").MustClick()
+	page.MustElement("#__layout > main > div > form > div > div.col.span-6.form-col > div:nth-child(2) > div.checkbox.pt-10.eula > div > label > span.checkbox-custom").MustClick()
+
+	time.Sleep(5 * time.Second)
+	page.MustElement("#submit > button").MustClick()
 }
 
 func (t *Tools) SetupImport(url string, password string, ip string) {
