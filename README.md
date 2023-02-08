@@ -55,4 +55,3 @@ You can run the following in `/terratest/test/host_test.go` to upgrade
 
 - `TestUpgradeHostRancher`
 - `TestUpgradeTenantRancher`
-- 
