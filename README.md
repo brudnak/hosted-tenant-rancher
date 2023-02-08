@@ -11,18 +11,36 @@ It includes a temporary workaround using https://github.com/go-rod/rod because t
 
 ## Setup
 
-There should be a file named `config.yml` that sits at the top level of this repository. It should match the following, replaced with your values.
+There should be a file named `config.yml` that sits at the top level of this repository sitting next to the `README.md`. It should match the following, replaced with your values.
 
 ```yml
 local:
-  pem_path: local-path-to-your-pem-file-for-aws
+  pem_path: your-local-path-to-aws-pem-file
 rancher:
-  bootstrap_password: whatever-bootstrap-password-you-want
-  email: email-to-use-in-helm-install-for-lets-encrypt
-  version: 2.7.0
-  image_tag: v2.7-head
+  bootstrap_password: whatever-rancher-bootstrap-password-you-want
+  email: email-you-want-to-use-for-lets-encrypt
+  version: 2.7.1
+  image_tag: v2.7.1
 k3s:
-  version: v1.24.7+k3s1
+  version: v1.23.6+k3s1
+tf_vars:
+  aws_access_key: your-aws-access-key
+  aws_secret_key: your-aws-secret-key
+  aws_prefix: a-prefix-for-naming-things-must-be-no-more-than-3-characters
+  aws_vpc: aws-vpc-you-want-to-use
+  aws_subnet_a: subnet-a-id
+  aws_subnet_b: subnet-b-id
+  aws_subnet_c: subnet-c-id
+  aws_ami: the-ami-that-you-want-to-use
+  aws_subnet_id: the-subnet-id
+  aws_security_group_id: what-security-group-you-want-to-use
+  aws_pem_key_name: the-name-of-your-pem-key-in-aws-no-file-extension
+  aws_rds_password: password-you-want-for-aws-rds-database-suggest-googling-for-requirements
+  aws_route53_fqdn: something.something.something
+  local_path_aws_pem: your-local-path-to-aws-pem-file
+upgrade:
+  version: 2.7.1
+  image_tag: v2.7-head
 ```
 
 ## Run
@@ -31,27 +49,10 @@ In `/terratest/test/host_test.go` run the function `TestHostInfrastructureCreate
 
 Once finished you'll get the output of the host and tenant Rancher URLs
 
-## Additional Terraform Setup
+## Upgrade
 
-Most of the dynamic Terraform tfvar files are created dynamically. However, you'll need to add your own to `/terratest/modules/aws`
+You can run the following in `/terratest/test/host_test.go` to upgrade
 
-It would look like the following:
-
-```tf
-# AWS Access Variables
-
-aws_access_key        = "your-aws-access-key"
-aws_secret_key        = "your-aws-secret-key"
-aws_prefix            = "your-initials" // this should only be 3 characters!
-aws_vpc               = "your-vpc"
-aws_subnet_a          = "your-subnet-a"
-aws_subnet_b          = "your-subnet-b"
-aws_subnet_c          = "your-subnet-c"
-aws_ami               = "which-ami-you-want"
-aws_subnet_id         = "your-subnet-id"
-aws_security_group_id = "your-security-group"
-aws_pem_key_name      = "aws-pem-key-name"
-aws_rds_password      = "your-rds-password-you-want-to-create" // this has restrictions, suggest googling them 
-aws_route53_fqdn      = "your-most-used-route53-fgdn"
-local_path_aws_pem    = "local-path-to-your-aws-pem-file"
-```
+- `TestUpgradeHostRancher`
+- `TestUpgradeTenantRancher`
+- 

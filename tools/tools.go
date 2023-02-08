@@ -88,13 +88,26 @@ func (t *Tools) SetupK3S(mysqlPassword string, mysqlEndpoint string, rancherURL 
 
 	if rancherType == "host" {
 		err = os.WriteFile("../modules/helm/host/terraform.tfvars", tfvarFileBytes, 0644)
+		hcl.GenHelmVar(
+			rancherURL,
+			viper.GetString("rancher.bootstrap_password"),
+			viper.GetString("rancher.email"),
+			viper.GetString("upgrade.version"),
+			viper.GetString("upgrade.image_tag"),
+			"../modules/helm/host/upgrade.tfvars")
 
 		if err != nil {
 			log.Println("failed creating host tfvars:", err)
 		}
 	} else if rancherType == "tenant" {
 		err = os.WriteFile("../modules/helm/tenant/terraform.tfvars", tfvarFileBytes, 0644)
-
+		hcl.GenHelmVar(
+			rancherURL,
+			viper.GetString("rancher.bootstrap_password"),
+			viper.GetString("rancher.email"),
+			viper.GetString("upgrade.version"),
+			viper.GetString("upgrade.image_tag"),
+			"../modules/helm/tenant/upgrade.tfvars")
 		if err != nil {
 			log.Println("failed creating tenant tfvars:", err)
 		}
@@ -381,7 +394,7 @@ func (t *Tools) SetupImport(url string, password string, ip string) {
 
 	adminToken := t.CreateToken(url, password)
 	t.CreateImport(url, adminToken)
-	time.Sleep(time.Second * 30)
+	time.Sleep(time.Minute * 2)
 	manifestUrl := t.GetManifestUrl(url, adminToken)
 	hcl.GenerateKubectlTfVar(ip, manifestUrl)
 	err := os.Setenv("KUBECONFIG", "theconfig.yml")

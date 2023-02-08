@@ -2,6 +2,7 @@ package test
 
 import (
 	toolkit "github.com/brudnak/hosted-tenant-rancher/tools"
+	"github.com/brudnak/hosted-tenant-rancher/tools/hcl"
 	"github.com/spf13/viper"
 	"log"
 	"os"
@@ -15,6 +16,8 @@ var hostUrl string
 var password string
 var configIp string
 
+var tools toolkit.Tools
+
 func TestHostInfrastructureCreate(t *testing.T) {
 
 	viper.AddConfigPath("../../")
@@ -26,7 +29,22 @@ func TestHostInfrastructureCreate(t *testing.T) {
 		log.Println("error reading config:", err)
 	}
 
-	var tools toolkit.Tools
+	hcl.GenAwsVar(
+		viper.GetString("tf_vars.aws_access_key"),
+		viper.GetString("tf_vars.aws_secret_key"),
+		viper.GetString("tf_vars.aws_prefix"),
+		viper.GetString("tf_vars.aws_vpc"),
+		viper.GetString("tf_vars.aws_subnet_a"),
+		viper.GetString("tf_vars.aws_subnet_b"),
+		viper.GetString("tf_vars.aws_subnet_c"),
+		viper.GetString("tf_vars.aws_ami"),
+		viper.GetString("tf_vars.aws_subnet_id"),
+		viper.GetString("tf_vars.aws_security_group_id"),
+		viper.GetString("tf_vars.aws_pem_key_name"),
+		viper.GetString("tf_vars.aws_rds_password"),
+		viper.GetString("tf_vars.aws_route53_fqdn"),
+		viper.GetString("tf_vars.local_path_aws_pem"),
+	)
 
 	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
 
@@ -87,8 +105,26 @@ func TestInstallHostRancher(t *testing.T) {
 	terraform.InitAndApply(t, terraformOptions)
 }
 
+func TestUpgradeHostRancher(t *testing.T) {
+
+	tools.RemoveFile("../modules/helm/host/terraform.tfvars")
+	originalPath := "../modules/helm/host/upgrade.tfvars"
+	newPath := "../modules/helm/host/terraform.tfvars"
+	e := os.Rename(originalPath, newPath)
+	if e != nil {
+		log.Fatal(e)
+	}
+
+	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
+
+		TerraformDir: "../modules/helm/host",
+		NoColor:      true,
+	})
+
+	terraform.InitAndApply(t, terraformOptions)
+}
+
 func TestSetupImport(t *testing.T) {
-	var tools toolkit.Tools
 
 	tools.WorkAround(hostUrl, password)
 	tools.SetupImport(hostUrl, password, configIp)
@@ -115,6 +151,24 @@ func TestInstallTenantRancher(t *testing.T) {
 	terraform.InitAndApply(t, terraformOptions)
 }
 
+func TestUpgradeTenantRancher(t *testing.T) {
+
+	tools.RemoveFile("../modules/helm/tenant/terraform.tfvars")
+	originalPath := "../modules/helm/tenant/upgrade.tfvars"
+	newPath := "../modules/helm/tenant/terraform.tfvars"
+	e := os.Rename(originalPath, newPath)
+	if e != nil {
+		log.Fatal(e)
+	}
+
+	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
+
+		TerraformDir: "../modules/helm/tenant",
+		NoColor:      true,
+	})
+	terraform.InitAndApply(t, terraformOptions)
+}
+
 func TestHostCleanup(t *testing.T) {
 	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
 		TerraformDir: "../modules/aws",
@@ -122,8 +176,6 @@ func TestHostCleanup(t *testing.T) {
 	})
 
 	terraform.Destroy(t, terraformOptions)
-
-	var tools toolkit.Tools
 
 	// Kubeconfig files
 	tools.RemoveFile("../../host.yml")
@@ -135,6 +187,7 @@ func TestHostCleanup(t *testing.T) {
 	tools.RemoveFile("../modules/helm/host/terraform.tfstate")
 	tools.RemoveFile("../modules/helm/host/terraform.tfstate.backup")
 	tools.RemoveFile("../modules/helm/host/terraform.tfvars")
+	tools.RemoveFile("../modules/helm/host/upgrade.tfvars")
 
 	// Helm Tenant Cleanup
 	tools.RemoveFolder("../modules/helm/tenant/.terraform")
@@ -142,6 +195,7 @@ func TestHostCleanup(t *testing.T) {
 	tools.RemoveFile("../modules/helm/tenant/terraform.tfstate")
 	tools.RemoveFile("../modules/helm/tenant/terraform.tfstate.backup")
 	tools.RemoveFile("../modules/helm/tenant/terraform.tfvars")
+	tools.RemoveFile("../modules/helm/tenant/upgrade.tfvars")
 
 	// Kubectl Cleanup
 	tools.RemoveFolder("../modules/kubectl/.terraform")
@@ -156,4 +210,5 @@ func TestHostCleanup(t *testing.T) {
 	defer tools.RemoveFile("../modules/aws/.terraform.lock.hcl")
 	defer tools.RemoveFile("../modules/aws/terraform.tfstate")
 	defer tools.RemoveFile("../modules/aws/terraform.tfstate.backup")
+	defer tools.RemoveFile("../modules/aws/terraform.tfvars")
 }
