@@ -45,7 +45,7 @@ upgrade:
 
 ## Run
 
-In `/terratest/test/host_test.go` run the function `TestHostInfrastructureCreate`. This will create a hosted rancher and tenant rancher that is imported within it. It could take around `~15 minutes` (It's slower because Terraform is slower with setting up AWS RDS Aurora MySQL databases is slow).
+In `/terratest/test/host_test.go` run the function `TestHostInfrastructureCreate`. This will create a hosted rancher and tenant rancher that is imported within it. It takes about `~15 minutes` because Terraform/AWS is slow with setting up the two RDS Aurora MySQL databases.
 
 Once finished you'll get the output of the host and tenant Rancher URLs
 
