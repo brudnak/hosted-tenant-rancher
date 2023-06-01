@@ -1,14 +1,5 @@
 # Hosted / Tenant Rancher
 
-## Temporary Note
-
-This repository is currently working as an MVP to create a hosted/tenant Rancher fully setup and outputs the URLs for the host and tenant.
-
-It includes a temporary workaround using https://github.com/go-rod/rod because two issues were discovered with Rancher's API / Rancher's Terraform provider while setting this up.
-
-- `github.com/rancher/rancher/issues/39779`
-- `github.com/rancher/terraform-provider-rancher2/issues/1042`
-
 ## Setup
 
 There should be a file named `config.yml` that sits at the top level of this repository sitting next to the `README.md`. It should match the following, replaced with your values.
@@ -55,3 +46,12 @@ You can run the following in `/terratest/test/host_test.go` to upgrade
 
 - `TestUpgradeHostRancher`
 - `TestUpgradeTenantRancher`
+
+## Temporary Note
+
+This repository is currently working as an MVP to create a hosted/tenant Rancher fully setup and outputs the URLs for the host and tenant.
+
+It includes a temporary workaround using https://github.com/go-rod/rod because two issues were discovered with Rancher's API / Rancher's Terraform provider while setting this up.
+
+- `github.com/rancher/rancher/issues/39779`
+- `github.com/rancher/terraform-provider-rancher2/issues/1042`
