@@ -10,8 +10,9 @@ local:
 rancher:
   bootstrap_password: whatever-rancher-bootstrap-password-you-want
   email: email-you-want-to-use-for-lets-encrypt
-  version: 2.7.1
-  image_tag: v2.7.1
+  version: 2.7.4
+  image_tag: v2.7.4
+  psp_bool: false
 k3s:
   version: v1.23.6+k3s1
 tf_vars:
@@ -30,7 +31,7 @@ tf_vars:
   aws_route53_fqdn: something.something.something
   local_path_aws_pem: your-local-path-to-aws-pem-file
 upgrade:
-  version: 2.7.1
+  version: 2.7.4
   image_tag: v2.7-head
 ```
 
