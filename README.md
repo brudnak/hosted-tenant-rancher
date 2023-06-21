@@ -9,7 +9,6 @@ local:
   pem_path: your-local-path-to-aws-pem-file
 rancher:
   bootstrap_password: whatever-rancher-bootstrap-password-you-want
-  email: email-you-want-to-use-for-lets-encrypt
   version: 2.7.4
   image_tag: v2.7.4
   psp_bool: false

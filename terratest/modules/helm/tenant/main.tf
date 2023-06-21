@@ -13,20 +13,6 @@ provider "helm" {
   }
 }
 
-resource "helm_release" "certs" {
-  name             = "cert-manager"
-  repository       = "https://charts.jetstack.io"
-  chart            = "cert-manager"
-  version          = "1.7.1"
-  namespace        = "cert-manager"
-  create_namespace = "true"
-
-  set {
-    name  = "installCRDs"
-    value = "true"
-  }
-}
-
 resource "helm_release" "rancher" {
   name             = "rancher"
   repository       = "https://releases.rancher.com/server-charts/latest"
@@ -56,22 +42,7 @@ resource "helm_release" "rancher" {
   }
 
   set {
-    name  = "ingress.tls.source"
-    value = "letsEncrypt"
+    name  = "tls"
+    value = "external"
   }
-
-  set {
-    name  = "letsEncrypt.email"
-    value = var.email
-  }
-
-  set {
-    name  = "letsEncrypt.ingress.class"
-    value = "traefik"
-  }
-
-  # wait for certs to be installed first
-  depends_on = [
-    helm_release.certs
-  ]
 }

@@ -7,7 +7,7 @@ output "server2_ip" {
 }
 
 output "mysql_password" {
-  value = var.aws_rds_password
+  value     = var.aws_rds_password
   sensitive = true
 }
 

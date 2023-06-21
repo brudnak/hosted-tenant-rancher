@@ -88,9 +88,9 @@ func (t *Tools) SetupK3S(mysqlPassword string, mysqlEndpoint string, rancherURL 
 	var tfvarFile string
 
 	if pspVal == false {
-		tfvarFile = fmt.Sprintf("rancher_url = \"%s\"\nbootstrap_password = \"%s\"\nemail = \"%s\"\nrancher_version = \"%s\"\nimage_tag = \"%s\"\npsp_bool = \"%v\"", rancherURL, viper.GetString("rancher.bootstrap_password"), viper.GetString("rancher.email"), viper.GetString("rancher.version"), viper.GetString("rancher.image_tag"), pspVal)
+		tfvarFile = fmt.Sprintf("rancher_url = \"%s\"\nbootstrap_password = \"%s\"\nrancher_version = \"%s\"\nimage_tag = \"%s\"\npsp_bool = \"%v\"", rancherURL, viper.GetString("rancher.bootstrap_password"), viper.GetString("rancher.version"), viper.GetString("rancher.image_tag"), pspVal)
 	} else {
-		tfvarFile = fmt.Sprintf("rancher_url = \"%s\"\nbootstrap_password = \"%s\"\nemail = \"%s\"\nrancher_version = \"%s\"\nimage_tag = \"%s\"", rancherURL, viper.GetString("rancher.bootstrap_password"), viper.GetString("rancher.email"), viper.GetString("rancher.version"), viper.GetString("rancher.image_tag"))
+		tfvarFile = fmt.Sprintf("rancher_url = \"%s\"\nbootstrap_password = \"%s\"\nrancher_version = \"%s\"\nimage_tag = \"%s\"", rancherURL, viper.GetString("rancher.bootstrap_password"), viper.GetString("rancher.version"), viper.GetString("rancher.image_tag"))
 	}
 
 	tfvarFileBytes := []byte(tfvarFile)
@@ -100,7 +100,6 @@ func (t *Tools) SetupK3S(mysqlPassword string, mysqlEndpoint string, rancherURL 
 		hcl.GenHelmVar(
 			rancherURL,
 			viper.GetString("rancher.bootstrap_password"),
-			viper.GetString("rancher.email"),
 			viper.GetString("upgrade.version"),
 			viper.GetString("upgrade.image_tag"),
 			"../modules/helm/host/upgrade.tfvars",
@@ -114,7 +113,6 @@ func (t *Tools) SetupK3S(mysqlPassword string, mysqlEndpoint string, rancherURL 
 		hcl.GenHelmVar(
 			rancherURL,
 			viper.GetString("rancher.bootstrap_password"),
-			viper.GetString("rancher.email"),
 			viper.GetString("upgrade.version"),
 			viper.GetString("upgrade.image_tag"),
 			"../modules/helm/tenant/upgrade.tfvars",
@@ -377,8 +375,6 @@ func (t *Tools) GetManifestUrl(url string, token string) string {
 	if err != nil {
 		log.Println(err)
 	}
-
-	log.Println("LOOK HERE:", regResponse.Data[0].ManifestURL)
 
 	return regResponse.Data[0].ManifestURL
 }
