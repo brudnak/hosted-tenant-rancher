@@ -34,28 +34,75 @@ func (t *Tools) RandomString(n int) string {
 	return string(s)
 }
 
+func (t *Tools) WaitForNodeReady(nodeIP string) error {
+	timeout := time.After(5 * time.Minute)
+	poll := time.Tick(10 * time.Second)
+
+	for {
+		select {
+		case <-timeout:
+			return fmt.Errorf("timed out waiting for node to become ready")
+		case <-poll:
+			// Check the K3S service status.
+			nodeStatus, err := t.RunCommand("systemctl is-active k3s", nodeIP)
+			if err != nil {
+				return fmt.Errorf("failed to check node status: %w", err)
+			}
+
+			// If the K3S service is running (i.e., the status is "active"), return nil.
+			if strings.TrimSpace(nodeStatus) == "active" {
+				return nil
+			}
+		}
+	}
+}
+
 func (t *Tools) SetupK3S(mysqlPassword string, mysqlEndpoint string, rancherURL string, node1IP string, node2IP string, rancherType string) (int, string) {
 
 	k3sVersion := viper.GetString("k3s.version")
 
 	nodeOneCommand := fmt.Sprintf(`curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='%s' sh -s - server --token=SECRET --datastore-endpoint='mysql://tfadmin:%s@tcp(%s)/k3s' --tls-san %s --node-external-ip %s`, k3sVersion, mysqlPassword, mysqlEndpoint, rancherURL, node1IP)
 
-	var _ = t.RunCommand(nodeOneCommand, node1IP)
+	_, err := t.RunCommand(nodeOneCommand, node1IP)
+	if err != nil {
+		log.Println(err)
+	}
 
-	token := t.RunCommand("sudo cat /var/lib/rancher/k3s/server/token", node1IP)
-	serverKubeConfig := t.RunCommand("sudo cat /etc/rancher/k3s/k3s.yaml", node1IP)
+	token, err := t.RunCommand("sudo cat /var/lib/rancher/k3s/server/token", node1IP)
+	if err != nil {
+		log.Println(err)
+	}
 
-	time.Sleep(10 * time.Second)
+	serverKubeConfig, err := t.RunCommand("sudo cat /etc/rancher/k3s/k3s.yaml", node1IP)
+	if err != nil {
+		log.Println(err)
+	}
+
+	// Wait for node one to be ready
+	err = t.WaitForNodeReady(node1IP)
+	if err != nil {
+		log.Println("node one is not ready: %w", err)
+	}
 
 	nodeTwoCommand := fmt.Sprintf(`curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='%s' sh -s - server --token=%s --datastore-endpoint='mysql://tfadmin:%s@tcp(%s)/k3s' --tls-san %s --node-external-ip %s`, k3sVersion, token, mysqlPassword, mysqlEndpoint, rancherURL, node2IP)
-	var _ = t.RunCommand(nodeTwoCommand, node2IP)
+	_, err = t.RunCommand(nodeTwoCommand, node2IP)
+	if err != nil {
+		log.Println(err)
+	}
 
-	time.Sleep(10 * time.Second)
+	// Wait for node two to be ready
+	err = t.WaitForNodeReady(node2IP)
+	if err != nil {
+		log.Println("node two is not ready: %w", err)
+	}
 
-	wcResponse := t.RunCommand("sudo k3s kubectl get nodes | wc -l", node1IP)
+	wcResponse, err := t.RunCommand("sudo k3s kubectl get nodes | wc -l", node1IP)
+	if err != nil {
+		log.Println(err)
+	}
+
 	actualNodeCount, err := strconv.Atoi(wcResponse)
 	actualNodeCount = actualNodeCount - 1
-
 	if err != nil {
 		log.Println(err)
 	}
@@ -214,7 +261,7 @@ func (t *Tools) CreateToken(url string, password string) string {
 	return tokenRes.Token
 }
 
-func (t *Tools) RunCommand(cmd string, pubIP string) string {
+func (t *Tools) RunCommand(cmd string, pubIP string) (string, error) {
 
 	path := viper.GetString("local.pem_path")
 
@@ -222,12 +269,12 @@ func (t *Tools) RunCommand(cmd string, pubIP string) string {
 
 	pemBytes, err := os.ReadFile(path)
 	if err != nil {
-		log.Fatal(err)
+		return "", fmt.Errorf("failed to read pem file: %w", err)
 	}
 
 	signer, err := ssh.ParsePrivateKey(pemBytes)
 	if err != nil {
-		log.Fatalf("parse key failed:%v", err)
+		return "", fmt.Errorf("failed to parse private key: %w", err)
 	}
 	config := &ssh.ClientConfig{
 		User:            "ubuntu",
@@ -236,36 +283,35 @@ func (t *Tools) RunCommand(cmd string, pubIP string) string {
 	}
 	conn, err := ssh.Dial("tcp", dialIP, config)
 	if err != nil {
-		log.Fatalf("dial failed:%v", err)
+		return "", fmt.Errorf("failed to establish ssh connection: %w", err)
 	}
-	defer func(conn *ssh.Client) {
-		err := conn.Close()
-		if err != nil {
+	defer func() {
+		if err := conn.Close(); err != nil {
 			log.Println(err)
 		}
-	}(conn)
+	}()
+
 	session, err := conn.NewSession()
 	if err != nil {
-		log.Fatalf("session failed:%v", err)
+		return "", fmt.Errorf("failed to create new ssh session: %w", err)
 	}
-	defer func(session *ssh.Session) {
-		err := session.Close()
-		if err != nil {
+	defer func() {
+		if err := session.Close(); err != nil {
 			log.Println(err)
 		}
-	}(session)
+	}()
+
 	var stdoutBuf bytes.Buffer
 	session.Stdout = &stdoutBuf
 	err = session.Run(cmd)
 	if err != nil {
-		log.Fatalf("Run failed:%v", err)
+		return "", fmt.Errorf("failed to run ssh command: %w", err)
 	}
 
 	stringOut := stdoutBuf.String()
-
 	stringOut = strings.TrimRight(stringOut, "\r\n")
 
-	return stringOut
+	return stringOut, nil
 }
 
 func (t *Tools) CheckIPAddress(ip string) string {

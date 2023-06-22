@@ -27,7 +27,7 @@ provider "aws" {
 resource "aws_instance" "aws_instance" {
   count                  = 2
   ami                    = var.aws_ami
-  instance_type          = "m5.2xlarge"
+  instance_type          = "m5.large"
   subnet_id              = var.aws_subnet_id
   vpc_security_group_ids = [var.aws_security_group_id]
   key_name               = var.aws_pem_key_name
@@ -125,7 +125,7 @@ resource "aws_rds_cluster_instance" "aws_rds_cluster_instance" {
   count              = 1
   identifier         = "${var.aws_prefix}-${random_pet.random_pet_rds.id}-${count.index}"
   cluster_identifier = aws_rds_cluster.aws_rds_cluster.id
-  instance_class     = "db.t4g.large" # Price Per Hour $0.129
+  instance_class     = "db.r5.large" # Price Per Hour $0.2500
   engine             = aws_rds_cluster.aws_rds_cluster.engine
   engine_version     = aws_rds_cluster.aws_rds_cluster.engine_version
 }
@@ -154,7 +154,6 @@ resource "aws_acm_certificate" "cert" {
 
 resource "aws_route53_record" "cert_validation" {
   count = 1
-
   name    = element(aws_acm_certificate.cert.domain_validation_options.*.resource_record_name, count.index)
   type    = element(aws_acm_certificate.cert.domain_validation_options.*.resource_record_type, count.index)
   zone_id = data.aws_route53_zone.zone.zone_id
