@@ -24,6 +24,14 @@ const randomStringSource = "abcdefghijklmnopqrstuvwxyz"
 
 type Tools struct{}
 
+type K3SConfig struct {
+	DBPassword string
+	DBEndpoint string
+	RancherURL string
+	Node1IP    string
+	Node2IP    string
+}
+
 func (t *Tools) RandomString(n int) string {
 	s, r := make([]rune, n), []rune(randomStringSource)
 	for i := range s {
@@ -57,46 +65,46 @@ func (t *Tools) WaitForNodeReady(nodeIP string) error {
 	}
 }
 
-func (t *Tools) SetupK3S(mysqlPassword string, mysqlEndpoint string, rancherURL string, node1IP string, node2IP string, rancherType string) (int, string) {
+func (t *Tools) K3SHostInstall(config K3SConfig) (int, string) {
 
 	k3sVersion := viper.GetString("k3s.version")
 
-	nodeOneCommand := fmt.Sprintf(`curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='%s' sh -s - server --token=SECRET --datastore-endpoint='mysql://tfadmin:%s@tcp(%s)/k3s' --tls-san %s --node-external-ip %s`, k3sVersion, mysqlPassword, mysqlEndpoint, rancherURL, node1IP)
+	nodeOneCommand := fmt.Sprintf(`curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='%s' sh -s - server --token=SECRET --datastore-endpoint='mysql://tfadmin:%s@tcp(%s)/k3s' --tls-san %s --node-external-ip %s`, k3sVersion, config.DBPassword, config.DBEndpoint, config.RancherURL, config.Node1IP)
 
-	_, err := t.RunCommand(nodeOneCommand, node1IP)
+	_, err := t.RunCommand(nodeOneCommand, config.Node1IP)
 	if err != nil {
 		log.Println(err)
 	}
 
-	token, err := t.RunCommand("sudo cat /var/lib/rancher/k3s/server/token", node1IP)
+	token, err := t.RunCommand("sudo cat /var/lib/rancher/k3s/server/token", config.Node1IP)
 	if err != nil {
 		log.Println(err)
 	}
 
-	serverKubeConfig, err := t.RunCommand("sudo cat /etc/rancher/k3s/k3s.yaml", node1IP)
+	serverKubeConfig, err := t.RunCommand("sudo cat /etc/rancher/k3s/k3s.yaml", config.Node1IP)
 	if err != nil {
 		log.Println(err)
 	}
 
 	// Wait for node one to be ready
-	err = t.WaitForNodeReady(node1IP)
+	err = t.WaitForNodeReady(config.Node1IP)
 	if err != nil {
 		log.Println("node one is not ready: %w", err)
 	}
 
-	nodeTwoCommand := fmt.Sprintf(`curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='%s' sh -s - server --token=%s --datastore-endpoint='mysql://tfadmin:%s@tcp(%s)/k3s' --tls-san %s --node-external-ip %s`, k3sVersion, token, mysqlPassword, mysqlEndpoint, rancherURL, node2IP)
-	_, err = t.RunCommand(nodeTwoCommand, node2IP)
+	nodeTwoCommand := fmt.Sprintf(`curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='%s' sh -s - server --token=%s --datastore-endpoint='mysql://tfadmin:%s@tcp(%s)/k3s' --tls-san %s --node-external-ip %s`, k3sVersion, token, config.DBPassword, config.DBEndpoint, config.RancherURL, config.Node2IP)
+	_, err = t.RunCommand(nodeTwoCommand, config.Node2IP)
 	if err != nil {
 		log.Println(err)
 	}
 
 	// Wait for node two to be ready
-	err = t.WaitForNodeReady(node2IP)
+	err = t.WaitForNodeReady(config.Node2IP)
 	if err != nil {
 		log.Println("node two is not ready: %w", err)
 	}
 
-	wcResponse, err := t.RunCommand("sudo k3s kubectl get nodes | wc -l", node1IP)
+	wcResponse, err := t.RunCommand("sudo k3s kubectl get nodes | wc -l", config.Node1IP)
 	if err != nil {
 		log.Println(err)
 	}
@@ -109,68 +117,122 @@ func (t *Tools) SetupK3S(mysqlPassword string, mysqlEndpoint string, rancherURL 
 
 	kubeConf := []byte(serverKubeConfig)
 
-	configIP := fmt.Sprintf("https://%s:6443", node1IP)
+	configIP := fmt.Sprintf("https://%s:6443", config.Node1IP)
 	output := bytes.Replace(kubeConf, []byte("https://127.0.0.1:6443"), []byte(configIP), -1)
 
-	if rancherType == "host" {
-		err = os.WriteFile("../../host.yml", output, 0644)
-		if err != nil {
-			log.Println("failed creating host config:", err)
-		}
-	} else if rancherType == "tenant" {
-		err = os.WriteFile("../../tenant.yml", output, 0644)
-		if err != nil {
-			log.Println("failed creating tenant config:", err)
-		}
-		err = os.WriteFile("../../terratest/modules/kubectl/theconfig.yml", output, 0644)
-		if err != nil {
-			log.Println("failed creating tenant config:", err)
-		}
-	} else {
-		log.Fatal("expecting either host or tenant for rancher type")
+	err = os.WriteFile("../../host.yml", output, 0644)
+	if err != nil {
+		log.Println("failed creating host config:", err)
 	}
 
-	pspVal := viper.GetBool("rancher.psp_bool")
+	// Initial terraform variable file
+	initialFilePath := "../modules/helm/host/terraform.tfvars"
+	hcl.RancherHelm(
+		config.RancherURL,
+		viper.GetString("rancher.bootstrap_password"),
+		viper.GetString("rancher.version"),
+		viper.GetString("rancher.image_tag"),
+		initialFilePath,
+		viper.GetBool("rancher.psp_bool"),
+	)
 
-	var tfvarFile string
+	// Upgrade terraform variable file
+	upgradeFilePath := "../modules/helm/host/upgrade.tfvars"
+	hcl.RancherHelm(
+		config.RancherURL,
+		viper.GetString("rancher.bootstrap_password"),
+		viper.GetString("upgrade.version"),
+		viper.GetString("upgrade.image_tag"),
+		upgradeFilePath,
+		viper.GetBool("rancher.psp_bool"))
+	return actualNodeCount, configIP
+}
 
-	if pspVal == false {
-		tfvarFile = fmt.Sprintf("rancher_url = \"%s\"\nbootstrap_password = \"%s\"\nrancher_version = \"%s\"\nimage_tag = \"%s\"\npsp_bool = \"%v\"", rancherURL, viper.GetString("rancher.bootstrap_password"), viper.GetString("rancher.version"), viper.GetString("rancher.image_tag"), pspVal)
-	} else {
-		tfvarFile = fmt.Sprintf("rancher_url = \"%s\"\nbootstrap_password = \"%s\"\nrancher_version = \"%s\"\nimage_tag = \"%s\"", rancherURL, viper.GetString("rancher.bootstrap_password"), viper.GetString("rancher.version"), viper.GetString("rancher.image_tag"))
+func (t *Tools) K3STenantInstall(config K3SConfig) (int, string) {
+
+	k3sVersion := viper.GetString("k3s.version")
+
+	nodeOneCommand := fmt.Sprintf(`curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='%s' sh -s - server --token=SECRET --datastore-endpoint='mysql://tfadmin:%s@tcp(%s)/k3s' --tls-san %s --node-external-ip %s`, k3sVersion, config.DBPassword, config.DBEndpoint, config.RancherURL, config.Node1IP)
+
+	_, err := t.RunCommand(nodeOneCommand, config.Node1IP)
+	if err != nil {
+		log.Println(err)
 	}
 
-	tfvarFileBytes := []byte(tfvarFile)
-
-	if rancherType == "host" {
-		err = os.WriteFile("../modules/helm/host/terraform.tfvars", tfvarFileBytes, 0644)
-		hcl.GenHelmVar(
-			rancherURL,
-			viper.GetString("rancher.bootstrap_password"),
-			viper.GetString("upgrade.version"),
-			viper.GetString("upgrade.image_tag"),
-			"../modules/helm/host/upgrade.tfvars",
-			viper.GetBool("rancher.psp_bool"))
-
-		if err != nil {
-			log.Println("failed creating host tfvars:", err)
-		}
-	} else if rancherType == "tenant" {
-		err = os.WriteFile("../modules/helm/tenant/terraform.tfvars", tfvarFileBytes, 0644)
-		hcl.GenHelmVar(
-			rancherURL,
-			viper.GetString("rancher.bootstrap_password"),
-			viper.GetString("upgrade.version"),
-			viper.GetString("upgrade.image_tag"),
-			"../modules/helm/tenant/upgrade.tfvars",
-			viper.GetBool("rancher.psp_bool"))
-		if err != nil {
-			log.Println("failed creating tenant tfvars:", err)
-		}
-	} else {
-		log.Fatal("expecting either host or tenant for rancher type")
+	token, err := t.RunCommand("sudo cat /var/lib/rancher/k3s/server/token", config.Node1IP)
+	if err != nil {
+		log.Println(err)
 	}
 
+	serverKubeConfig, err := t.RunCommand("sudo cat /etc/rancher/k3s/k3s.yaml", config.Node1IP)
+	if err != nil {
+		log.Println(err)
+	}
+
+	// Wait for node one to be ready
+	err = t.WaitForNodeReady(config.Node1IP)
+	if err != nil {
+		log.Println("node one is not ready: %w", err)
+	}
+
+	nodeTwoCommand := fmt.Sprintf(`curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='%s' sh -s - server --token=%s --datastore-endpoint='mysql://tfadmin:%s@tcp(%s)/k3s' --tls-san %s --node-external-ip %s`, k3sVersion, token, config.DBPassword, config.DBEndpoint, config.RancherURL, config.Node2IP)
+	_, err = t.RunCommand(nodeTwoCommand, config.Node2IP)
+	if err != nil {
+		log.Println(err)
+	}
+
+	// Wait for node two to be ready
+	err = t.WaitForNodeReady(config.Node2IP)
+	if err != nil {
+		log.Println("node two is not ready: %w", err)
+	}
+
+	wcResponse, err := t.RunCommand("sudo k3s kubectl get nodes | wc -l", config.Node1IP)
+	if err != nil {
+		log.Println(err)
+	}
+
+	actualNodeCount, err := strconv.Atoi(wcResponse)
+	actualNodeCount = actualNodeCount - 1
+	if err != nil {
+		log.Println(err)
+	}
+
+	kubeConf := []byte(serverKubeConfig)
+
+	configIP := fmt.Sprintf("https://%s:6443", config.Node1IP)
+	output := bytes.Replace(kubeConf, []byte("https://127.0.0.1:6443"), []byte(configIP), -1)
+
+	err = os.WriteFile("../../tenant.yml", output, 0644)
+	if err != nil {
+		log.Println("failed creating tenant config:", err)
+	}
+
+	err = os.WriteFile("../../terratest/modules/kubectl/theconfig.yml", output, 0644)
+	if err != nil {
+		log.Println("failed creating tenant config:", err)
+	}
+
+	// Initial terraform variable file
+	initialFilePath := "../modules/helm/tenant/terraform.tfvars"
+	hcl.RancherHelm(
+		config.RancherURL,
+		viper.GetString("rancher.bootstrap_password"),
+		viper.GetString("rancher.version"),
+		viper.GetString("rancher.image_tag"),
+		initialFilePath,
+		viper.GetBool("rancher.psp_bool"),
+	)
+
+	// Upgrade terraform variable file
+	upgradeFilePath := "../modules/helm/tenant/upgrade.tfvars"
+	hcl.RancherHelm(
+		config.RancherURL,
+		viper.GetString("rancher.bootstrap_password"),
+		viper.GetString("upgrade.version"),
+		viper.GetString("upgrade.image_tag"),
+		upgradeFilePath,
+		viper.GetBool("rancher.psp_bool"))
 	return actualNodeCount, configIP
 }
 
@@ -322,18 +384,20 @@ func (t *Tools) CheckIPAddress(ip string) string {
 	}
 }
 
-func (t *Tools) RemoveFile(filePath string) {
+func (t *Tools) RemoveFile(filePath string) error {
 	err := os.Remove(filePath)
 	if err != nil {
-		log.Println(err)
+		return fmt.Errorf("error removing file %s: %w", filePath, err)
 	}
+	return nil
 }
 
-func (t *Tools) RemoveFolder(folderPath string) {
+func (t *Tools) RemoveFolder(folderPath string) error {
 	err := os.RemoveAll(folderPath)
 	if err != nil {
-		log.Println(err)
+		return fmt.Errorf("error removing folder %s: %w", folderPath, err)
 	}
+	return nil
 }
 
 func (t *Tools) CreateImport(url string, token string) {

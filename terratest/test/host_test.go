@@ -72,8 +72,24 @@ func TestHostInfrastructureCreate(t *testing.T) {
 	assert.Equal(t, "valid", noneOneIPAddressValidationResult)
 	assert.Equal(t, "valid", nodeTwoIPAddressValidationResult)
 
-	actualHostNodeCount, _ := tools.SetupK3S(infra1MysqlPassword, infra1MysqlEndpoint, infra1RancherURL, infra1Server1IPAddress, infra1Server2IPAddress, "host")
-	actualTenantNodeCount, tenantIp := tools.SetupK3S(infra2MysqlPassword, infra2MysqlEndpoint, infra2RancherURL, infra2Server1IPAddress, infra2Server2IPAddress, "tenant")
+	host := toolkit.K3SConfig{
+		DBPassword: infra1MysqlPassword,
+		DBEndpoint: infra1MysqlEndpoint,
+		RancherURL: infra1RancherURL,
+		Node1IP:    infra1Server1IPAddress,
+		Node2IP:    infra1Server2IPAddress,
+	}
+
+	tenant := toolkit.K3SConfig{
+		DBPassword: infra2MysqlPassword,
+		DBEndpoint: infra2MysqlEndpoint,
+		RancherURL: infra2RancherURL,
+		Node1IP:    infra2Server1IPAddress,
+		Node2IP:    infra2Server2IPAddress,
+	}
+
+	actualHostNodeCount, _ := tools.K3SHostInstall(host)
+	actualTenantNodeCount, tenantIp := tools.K3STenantInstall(tenant)
 
 	configIp = tenantIp
 
@@ -107,7 +123,7 @@ func TestInstallHostRancher(t *testing.T) {
 
 func TestUpgradeHostRancher(t *testing.T) {
 
-	tools.RemoveFile("../modules/helm/host/terraform.tfvars")
+	cleanupFiles("../modules/helm/host/terraform.tfvars")
 	originalPath := "../modules/helm/host/upgrade.tfvars"
 	newPath := "../modules/helm/host/terraform.tfvars"
 	e := os.Rename(originalPath, newPath)
@@ -153,7 +169,7 @@ func TestInstallTenantRancher(t *testing.T) {
 
 func TestUpgradeTenantRancher(t *testing.T) {
 
-	tools.RemoveFile("../modules/helm/tenant/terraform.tfvars")
+	cleanupFiles("../modules/helm/tenant/terraform.tfvars")
 	originalPath := "../modules/helm/tenant/upgrade.tfvars"
 	newPath := "../modules/helm/tenant/terraform.tfvars"
 	e := os.Rename(originalPath, newPath)
@@ -177,38 +193,55 @@ func TestHostCleanup(t *testing.T) {
 
 	terraform.Destroy(t, terraformOptions)
 
-	// Kubeconfig files
-	tools.RemoveFile("../../host.yml")
-	tools.RemoveFile("../../tenant.yml")
+	filepaths := []string{
+		"../../host.yml",
+		"../../tenant.yml",
+		"../modules/helm/host/.terraform.lock.hcl",
+		"../modules/helm/host/terraform.tfstate",
+		"../modules/helm/host/terraform.tfstate.backup",
+		"../modules/helm/host/terraform.tfvars",
+		"../modules/helm/host/upgrade.tfvars",
+		"../modules/helm/tenant/.terraform.lock.hcl",
+		"../modules/helm/tenant/terraform.tfstate",
+		"../modules/helm/tenant/terraform.tfstate.backup",
+		"../modules/helm/tenant/terraform.tfvars",
+		"../modules/helm/tenant/upgrade.tfvars",
+		"../modules/kubectl/.terraform.lock.hcl",
+		"../modules/kubectl/terraform.tfstate",
+		"../modules/kubectl/terraform.tfstate.backup",
+		"../modules/kubectl/terraform.tfvars",
+		"../modules/kubectl/theconfig.yml",
+		"../modules/aws/.terraform.lock.hcl",
+		"../modules/aws/terraform.tfstate",
+		"../modules/aws/terraform.tfstate.backup",
+		"../modules/aws/terraform.tfvars",
+	}
 
-	// Helm Host cleanup
-	tools.RemoveFolder("../modules/helm/host/.terraform")
-	tools.RemoveFile("../modules/helm/host/.terraform.lock.hcl")
-	tools.RemoveFile("../modules/helm/host/terraform.tfstate")
-	tools.RemoveFile("../modules/helm/host/terraform.tfstate.backup")
-	tools.RemoveFile("../modules/helm/host/terraform.tfvars")
-	tools.RemoveFile("../modules/helm/host/upgrade.tfvars")
+	folderpaths := []string{
+		"../modules/helm/host/.terraform",
+		"../modules/helm/tenant/.terraform",
+		"../modules/kubectl/.terraform",
+		"../modules/aws/.terraform",
+	}
 
-	// Helm Tenant Cleanup
-	tools.RemoveFolder("../modules/helm/tenant/.terraform")
-	tools.RemoveFile("../modules/helm/tenant/.terraform.lock.hcl")
-	tools.RemoveFile("../modules/helm/tenant/terraform.tfstate")
-	tools.RemoveFile("../modules/helm/tenant/terraform.tfstate.backup")
-	tools.RemoveFile("../modules/helm/tenant/terraform.tfvars")
-	tools.RemoveFile("../modules/helm/tenant/upgrade.tfvars")
+	cleanupFiles(filepaths...)
+	cleanupFolders(folderpaths...)
+}
 
-	// Kubectl Cleanup
-	tools.RemoveFolder("../modules/kubectl/.terraform")
-	tools.RemoveFile("../modules/kubectl/.terraform.lock.hcl")
-	tools.RemoveFile("../modules/kubectl/terraform.tfstate")
-	tools.RemoveFile("../modules/kubectl/terraform.tfstate.backup")
-	tools.RemoveFile("../modules/kubectl/terraform.tfvars")
-	tools.RemoveFile("../modules/kubectl/theconfig.yml")
+func cleanupFiles(paths ...string) {
+	for _, path := range paths {
+		err := tools.RemoveFile(path)
+		if err != nil {
+			log.Println("error removing file", err)
+		}
+	}
+}
 
-	// AWS Cleanup
-	defer tools.RemoveFolder("../modules/aws/.terraform")
-	defer tools.RemoveFile("../modules/aws/.terraform.lock.hcl")
-	defer tools.RemoveFile("../modules/aws/terraform.tfstate")
-	defer tools.RemoveFile("../modules/aws/terraform.tfstate.backup")
-	defer tools.RemoveFile("../modules/aws/terraform.tfvars")
+func cleanupFolders(paths ...string) {
+	for _, path := range paths {
+		err := tools.RemoveFolder(path)
+		if err != nil {
+			log.Println("error removing folder", err)
+		}
+	}
 }
