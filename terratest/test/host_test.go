@@ -18,7 +18,7 @@ var configIp string
 
 var tools toolkit.Tools
 
-func TestHostInfrastructureCreate(t *testing.T) {
+func TestCreateHostedTenantRancher(t *testing.T) {
 
 	viper.AddConfigPath("../../")
 	viper.SetConfigName("config")

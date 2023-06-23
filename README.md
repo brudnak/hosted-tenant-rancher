@@ -36,9 +36,11 @@ upgrade:
 
 ## Run
 
-In `/terratest/test/host_test.go` run the function `TestHostInfrastructureCreate`. This will create a hosted rancher and tenant rancher that is imported within it. It takes about `~15 minutes` because Terraform/AWS is slow with setting up the two RDS Aurora MySQL databases.
+In `/terratest/test/host_test.go` run the function `TestCreateHostedTenantRancher`.
+This will create a hosted rancher and tenant rancher that is imported within it.
+It takes about `~15 minutes` because Terraform/AWS is slow with setting up the two RDS Aurora MySQL databases.
 
-Once finished you'll get the output of the host and tenant Rancher URLs
+Once finished, you'll get the output of the host and tenant Rancher URLs
 
 ## Upgrade
 
@@ -49,9 +51,9 @@ You can run the following in `/terratest/test/host_test.go` to upgrade
 
 ## Temporary Note
 
-This repository is currently working as an MVP to create a hosted/tenant Rancher fully setup and outputs the URLs for the host and tenant.
-
-It includes a temporary workaround using https://github.com/go-rod/rod because two issues were discovered with Rancher's API / Rancher's Terraform provider while setting this up.
+This repository includes a temporary workaround
+using https://github.com/go-rod/rod
+because two issues were discovered with Rancher's API / Rancher's Terraform provider while setting this up.
 
 - `github.com/rancher/rancher/issues/39779`
 - `github.com/rancher/terraform-provider-rancher2/issues/1042`
