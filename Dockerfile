@@ -32,4 +32,5 @@ RUN useradd -r -u 106 -g 112 jenkins
 COPY . .
 
 # This container will be executable
-ENTRYPOINT ["/bin/bash"]
+#ENTRYPOINT ["/bin/bash"]
+SHELL ["/bin/bash", "-c"]
