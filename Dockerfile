@@ -14,6 +14,8 @@ RUN apt-get update && apt-get install -y wget gnupg2 unzip \
 
 # Set the Current Working Directory inside the container
 WORKDIR $GOPATH/src/github.com/brudnak/hosted-tenant-rancher/terratest
+ARG CONFIG_FILE
+COPY $CONFIG_FILE ../config.yml
 
 # Copy go mod and sum files
 COPY [".", "$GOPATH/src/github.com/brudnak/hosted-tenant-rancher"]

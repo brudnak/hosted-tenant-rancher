@@ -5,7 +5,7 @@ pipeline {
         stage('Build Docker image') {
             steps {
                 script {
-                    dockerImage = docker.build 'terratest-image'
+                    dockerImage = docker.build('terratest-image', "--build-arg CONFIG_FILE=${params.inputFile}")
                 }
             }
         }
