@@ -4,9 +4,8 @@ pipeline {
     stages {
         stage('Build Docker image') {
             steps {
-             script {
-                       dockerImage = docker.build('terratest-image', "--build-arg CONFIG_FILE=${params.inputFile}")
-                    }
+                script {
+                    dockerImage = docker.build('terratest-image', "--build-arg CONFIG_FILE=${params.inputFile}")
                 }
             }
         }
@@ -21,7 +20,7 @@ pipeline {
                 }
             }
         }
-    
+    }
 
     post {
         always {
@@ -33,4 +32,3 @@ pipeline {
         file(name: 'inputFile', description: 'Select the file to upload')
     }
 }
-
