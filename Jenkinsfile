@@ -10,6 +10,7 @@ pipeline {
                     }
             }
         }
+        }
 
         stage('Run Tests') {
             steps {
@@ -32,5 +33,4 @@ pipeline {
     parameters {
         file(name: 'inputFile', description: 'Select the file to upload')
     }
-}
 }
