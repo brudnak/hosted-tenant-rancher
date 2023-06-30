@@ -13,7 +13,7 @@ pipeline {
         stage('Run Tests') {
             steps {
                 script {
-                    dockerImage.inside('-v $PWD:/workspace') {
+                    dockerImage.inside() {
                         sh 'cp /workspace/${params.inputFile} ../config.yml'
                         sh '-Dorg.jenkinsci.plugins.durabletask.BourneShellScript.LAUNCH_DIAGNOSTICS=true' + ' go test -v -run TestCreateHostedTenantRancher ./terratest/test'
                     }
