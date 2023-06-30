@@ -24,6 +24,8 @@ COPY [".", "$GOPATH/src/github.com/brudnak/hosted-tenant-rancher"]
 # Download all dependencies. Dependencies will be cached if the go.mod and go.sum files are not changed
 RUN go mod download
 
+RUN useradd -r -u 106 -g 112 jenkins
+
 # Copy the source from the current directory to the Working Directory inside the container
 COPY . .
 
