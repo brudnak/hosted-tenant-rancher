@@ -14,7 +14,6 @@ pipeline {
             steps {
                 script {
                     dockerImage.inside() {
-                        sh "cp /workspace/config.yml ../config.yml"
                         sh "go test -v -run TestCreateHostedTenantRancher ./terratest/test"
                     }
                 }
@@ -26,9 +25,5 @@ pipeline {
         always {
             cleanWs()
         }
-    }
-
-    parameters {
-        file(name: 'inputFile', description: 'Select the file to upload')
     }
 }
