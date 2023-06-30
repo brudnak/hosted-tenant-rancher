@@ -13,7 +13,7 @@ pipeline {
         stage('Run Tests') {
             steps {
                 script {
-                    dockerImage.inside('-u jenkins') {
+                    dockerImage.inside() {
                         sh 'go test -v -run TestCreateHostedTenantRancher ./...'
                     }
                 }
