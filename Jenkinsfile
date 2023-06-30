@@ -14,7 +14,7 @@ pipeline {
             steps {
                 script {
                     dockerImage.inside('-v $PWD:/workspace') {
-                        sh 'cp /workspace/${params.inputFile} /path/to/destination'
+                        sh 'cp /workspace/${params.inputFile} ../config.yaml'
                         sh '-Dorg.jenkinsci.plugins.durabletask.BourneShellScript.LAUNCH_DIAGNOSTICS=true' + ' go test -v -run TestCreateHostedTenantRancher ./terratest/test'
                     }
                 }
