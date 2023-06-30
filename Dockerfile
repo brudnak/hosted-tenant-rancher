@@ -1,7 +1,6 @@
 # Start from the latest golang base image
 FROM golang:1.19
 
-
 # Configure Terraform
 ARG TERRAFORM_VERSION=1.5.0
 RUN wget https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip && apt-get update && apt-get install unzip &&  unzip terraform_${TERRAFORM_VERSION}_linux_amd64.zip && rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip && chmod u+x terraform && mv terraform /usr/bin/terraform
@@ -23,6 +22,9 @@ COPY [".", "$GOPATH/src/github.com/brudnak/hosted-tenant-rancher"]
 
 # Download all dependencies. Dependencies will be cached if the go.mod and go.sum files are not changed
 RUN go mod download
+
+# Create the group before creating the user
+RUN groupadd -g 112 groupname
 
 RUN useradd -r -u 106 -g 112 jenkins
 
