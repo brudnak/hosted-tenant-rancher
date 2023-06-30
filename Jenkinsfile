@@ -8,8 +8,8 @@ pipeline {
                     dockerImage = docker.build("terratest-image") {
                         args "--build-arg", "CONFIG_FILE=${params.inputFile?.name}"
                     }
+                }
             }
-        }
         }
 
         stage('Run Tests') {
@@ -34,3 +34,4 @@ pipeline {
         file(name: 'inputFile', description: 'Select the file to upload')
     }
 }
+
