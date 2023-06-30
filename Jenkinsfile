@@ -14,7 +14,7 @@ pipeline {
             steps {
                 script {
                     dockerImage.inside() {
-                        sh 'go test -v -run TestCreateHostedTenantRancher ./...'
+                        sh 'go test -v -run TestCreateHostedTenantRancher ./terratest/test'
                     }
                 }
             }
