@@ -27,6 +27,7 @@ RUN go mod download
 RUN groupadd -g 112 groupname
 
 RUN useradd -r -u 106 -g 112 jenkins
+RUN chmod -R 777 /home
 
 # Copy the source from the current directory to the Working Directory inside the container
 COPY . .
