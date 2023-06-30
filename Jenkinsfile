@@ -13,11 +13,22 @@ pipeline {
         stage('Run Tests') {
             steps {
                 script {
-                    dockerImage.inside() {
+                    dockerImage.inside('-v $PWD:/workspace') {
+                        sh 'cp /workspace/${params.inputFile} /path/to/destination'
                         sh 'go test -v -run TestCreateHostedTenantRancher ./terratest/test'
                     }
                 }
             }
         }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+    }
+
+    parameters {
+        file(name: 'inputFile', description: 'Select the file to upload')
     }
 }
