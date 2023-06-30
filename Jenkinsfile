@@ -5,7 +5,7 @@ pipeline {
         stage('Build Docker image') {
             steps {
                 script {
-                    dockerImage = docker.build('terratest-image', "--build-arg CONFIG_FILE=config.yml")
+                    dockerImage = docker.build('terratest-image')
                 }
             }
         }
@@ -14,7 +14,7 @@ pipeline {
             steps {
                 script {
                     dockerImage.inside() {
-                        sh "cp /workspace/inputFile ../config.yml"
+                        sh "cp /workspace/config.yml ../config.yml"
                         sh "go test -v -run TestCreateHostedTenantRancher ./terratest/test"
                     }
                 }
