@@ -12,7 +12,7 @@ pipeline {
           sh 'docker build -t my-app .'
 
           // Run the Docker container with the configuration file
-          sh 'docker run -d --name terratest-image -v $(pwd)/config:/ terratest-image'
+          sh 'docker run -d --name terratest-image -v $(pwd)/config.yml:./terratest terratest-image'
         }
       }
     }
@@ -34,7 +34,7 @@ pipeline {
   post {
     always {
         // Remove the Docker container if it exists
-        sh 'docker rm -f my-app || true'
+        // sh 'docker rm -f my-app || true'
         cleanWs()
     }
   }

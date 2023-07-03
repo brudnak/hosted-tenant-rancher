@@ -1,12 +1,13 @@
 package test
 
 import (
-	toolkit "github.com/brudnak/hosted-tenant-rancher/tools"
-	"github.com/brudnak/hosted-tenant-rancher/tools/hcl"
-	"github.com/spf13/viper"
 	"log"
 	"os"
 	"testing"
+
+	toolkit "github.com/brudnak/hosted-tenant-rancher/tools"
+	"github.com/brudnak/hosted-tenant-rancher/tools/hcl"
+	"github.com/spf13/viper"
 
 	"github.com/gruntwork-io/terratest/modules/terraform"
 	"github.com/stretchr/testify/assert"
@@ -20,7 +21,7 @@ var tools toolkit.Tools
 
 func TestCreateHostedTenantRancher(t *testing.T) {
 
-	viper.AddConfigPath("../../")
+	viper.AddConfigPath("../../config")
 	viper.SetConfigName("config")
 	viper.SetConfigType("yml")
 	err := viper.ReadInConfig()
