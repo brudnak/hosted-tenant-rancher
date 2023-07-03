@@ -12,7 +12,7 @@ pipeline {
           sh 'docker build -t my-app .'
 
           // Run the Docker container with the configuration file
-          sh 'docker run -d --name my-app -v $(pwd)/config.yml:/config my-app'
+          sh 'docker run -d --name my-app -v $(pwd)/config.yml:/myfolder my-app'
         }
       }
     }
