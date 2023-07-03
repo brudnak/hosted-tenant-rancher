@@ -9,7 +9,7 @@ pipeline {
           writeFile file: 'config.yml', text: params.CONFIG
 
           // Build the Docker image
-          sh 'docker build -t my-app .'
+          sh 'docker build -t terratest-image .'
 
           // Run the Docker container with the configuration file
           sh 'docker run -d --name terratest-image -v $(pwd)/config.yml:/go/src/github.com/brudnak/hosted-tenant-rancher/config.yml terratest-image'
