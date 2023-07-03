@@ -12,7 +12,7 @@ pipeline {
           sh 'docker build -t my-app .'
 
           // Run the Docker container with the configuration file
-          sh 'docker run -d --name terratest-image -v $(pwd)/config.yml:./terratest terratest-image'
+          sh 'docker run -d --name terratest-image -v $(pwd)/config.yml:/config terratest-image'
         }
       }
     }
