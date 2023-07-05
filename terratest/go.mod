@@ -3,15 +3,16 @@ module github.com/brudnak/hosted-tenant-rancher/terratest
 go 1.19
 
 require (
-	github.com/brudnak/hosted-tenant-rancher/tools v0.0.0-20221112063128-622e907eff9b
+	github.com/brudnak/hosted-tenant-rancher/tools v0.0.0-20230623190010-d4632af30d9b
 	github.com/gruntwork-io/terratest v0.40.24
-	github.com/spf13/viper v1.13.0
+	github.com/spf13/viper v1.14.0
 	github.com/stretchr/testify v1.8.1
 )
 
 require (
 	cloud.google.com/go v0.104.0 // indirect
-	cloud.google.com/go/compute v1.10.0 // indirect
+	cloud.google.com/go/compute v1.12.1 // indirect
+	cloud.google.com/go/compute/metadata v0.2.1 // indirect
 	cloud.google.com/go/iam v0.6.0 // indirect
 	cloud.google.com/go/storage v1.23.0 // indirect
 	github.com/agext/levenshtein v1.2.3 // indirect
@@ -19,7 +20,8 @@ require (
 	github.com/aws/aws-sdk-go v1.40.56 // indirect
 	github.com/bgentry/go-netrc v0.0.0-20140422174119-9fd32a8b3d3d // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/fsnotify/fsnotify v1.5.4 // indirect
+	github.com/fsnotify/fsnotify v1.6.0 // indirect
+	github.com/go-rod/rod v0.112.2 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/golang/snappy v0.0.3 // indirect
@@ -49,24 +51,27 @@ require (
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.5 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/spf13/afero v1.8.2 // indirect
+	github.com/spf13/afero v1.9.2 // indirect
 	github.com/spf13/cast v1.5.0 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/subosito/gotenv v1.4.1 // indirect
 	github.com/tmccombs/hcl2json v0.3.3 // indirect
 	github.com/ulikunitz/xz v0.5.8 // indirect
+	github.com/ysmood/goob v0.4.0 // indirect
+	github.com/ysmood/gson v0.7.3 // indirect
+	github.com/ysmood/leakless v0.8.0 // indirect
 	github.com/zclconf/go-cty v1.9.1 // indirect
 	go.opencensus.io v0.23.0 // indirect
-	golang.org/x/crypto v0.1.0 // indirect
-	golang.org/x/net v0.1.0 // indirect
-	golang.org/x/oauth2 v0.0.0-20221006150949-b44042a4b9c1 // indirect
-	golang.org/x/sys v0.1.0 // indirect
+	golang.org/x/crypto v0.2.0 // indirect
+	golang.org/x/net v0.2.0 // indirect
+	golang.org/x/oauth2 v0.0.0-20221014153046-6fdb5e3db783 // indirect
+	golang.org/x/sys v0.2.0 // indirect
 	golang.org/x/text v0.4.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
-	google.golang.org/api v0.99.0 // indirect
+	google.golang.org/api v0.102.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/genproto v0.0.0-20221010155953-15ba04fc1c0e // indirect
+	google.golang.org/genproto v0.0.0-20221024183307-1bc688fe9f3e // indirect
 	google.golang.org/grpc v1.50.1 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect

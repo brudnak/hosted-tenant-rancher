@@ -1,5 +1,9 @@
 # Hosted / Tenant Rancher
 
+## Jenkins
+
+Running in test Jenkins as of this commit. Just need to figure out the config file transfer.
+
 ## Setup
 
 There should be a file named `config.yml` that sits at the top level of this repository sitting next to the `README.md`. It should match the following, replaced with your values.
