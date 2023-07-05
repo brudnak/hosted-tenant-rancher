@@ -28,6 +28,7 @@ pipeline {
       steps {
         script {
           // Define dockerImage by building an image or pulling from registry
+          def dockerImage = docker.image('my-app') // Assuming 'my-app' is your Docker image name
 
           dockerImage.inside() {
             sh "go test -v -run TestCreateHostedTenantRancher ./terratest/test"
@@ -40,7 +41,8 @@ pipeline {
   post {
     always {
         // Remove the Docker container if it exists
-        // sh 'docker rm -f my-app || true'
+        sh 'docker rm -f my-app || true'
+        sh 'docker rmi my-app || true'
         cleanWs()
     }
   }
