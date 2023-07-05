@@ -35,7 +35,6 @@ tf_vars:
   aws_pem_key_name: the-name-of-your-pem-key-in-aws-no-file-extension
   aws_rds_password: password-you-want-for-aws-rds-database-suggest-googling-for-requirements
   aws_route53_fqdn: something.something.something
-  local_path_aws_pem: your-local-path-to-aws-pem-file
 upgrade:
   version: 2.7.5-rc5
   image_tag: v2.7.5-rc5
