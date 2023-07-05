@@ -68,8 +68,3 @@ variable "aws_rds_password" {
   type        = string
   description = "Password for the Amazon Aurora MySQL database."
 }
-
-variable "local_path_aws_pem" {
-  type        = string
-  description = "Local machine path to pem file used to ssh into AWS instances."
-}
