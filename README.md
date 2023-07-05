@@ -2,7 +2,10 @@
 
 ## Jenkins
 
-Running in test Jenkins as of this commit. Just need to figure out the config file transfer.
+Currently able
+to run from Jenkins
+when using a Multi-line String Parameter
+named `CONFIG` and pasting in your version of the `config.yml` file shown below.
 
 ## Setup
 
