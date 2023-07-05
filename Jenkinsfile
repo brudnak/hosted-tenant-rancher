@@ -8,10 +8,6 @@ pipeline {
           // Write the CONFIG parameter to a file
           writeFile file: 'config.yml', text: params.CONFIG
 
-          // Print the contents of config.yml for debugging purposes
-          sh 'echo "Print the contents of config.yml for debugging purposes"'
-          sh 'cat config.yml'
-
           // Build the Docker image with ARG for config.yml
           sh 'docker build --build-arg CONFIG_FILE=config.yml -t my-app .'
         }
@@ -25,7 +21,7 @@ pipeline {
           def dockerImage = docker.image('my-app') // Assuming 'my-app' is your Docker image name
 
           dockerImage.inside() {
-            sh "go test -v -run TestCreateHostedTenantRancher ./terratest/test"
+            sh "go test -v -timeout 30m -run TestCreateHostedTenantRancher ./terratest/test"
           }
         }
       }
