@@ -21,7 +21,7 @@ var tools toolkit.Tools
 
 func TestCreateHostedTenantRancher(t *testing.T) {
 
-	viper.AddConfigPath("../../config")
+	viper.AddConfigPath("../../")
 	viper.SetConfigName("config")
 	viper.SetConfigType("yml")
 	err := viper.ReadInConfig()

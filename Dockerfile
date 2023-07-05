@@ -21,14 +21,18 @@ COPY [".", "$GOPATH/src/github.com/brudnak/hosted-tenant-rancher"]
 # Download all dependencies. Dependencies will be cached if the go.mod and go.sum files are not changed
 RUN go mod download
 
+# Copy the source from the current directory to the Working Directory inside the container
+COPY . .
+
+# Copy the config file into the container
+ARG CONFIG_FILE
+COPY ${CONFIG_FILE} /config.yml
+
 # Create the group before creating the user
 RUN groupadd -g 112 groupname
 
 RUN useradd -r -u 106 -g 112 jenkins
 RUN chmod -R 777 /home
-
-# Copy the source from the current directory to the Working Directory inside the container
-COPY . .
 
 # This container will be executable
 SHELL ["/bin/bash", "-c"]

@@ -12,14 +12,8 @@ pipeline {
           sh 'echo "Print the contents of config.yml for debugging purposes"'
           sh 'cat config.yml'
 
-          // Build the Docker image
-          sh 'docker build -t my-app .'
-
-          // Print the current directory for debugging purposes
-          sh 'pwd'
-
-          // Run the Docker container with the configuration file
-          sh 'docker run -d --name my-app -v $(pwd)/config.yml:/myfolder/config.yml my-app'
+          // Build the Docker image with ARG for config.yml
+          sh 'docker build --build-arg CONFIG_FILE=config.yml -t my-app .'
         }
       }
     }
@@ -40,10 +34,10 @@ pipeline {
 
   post {
     always {
-        // Remove the Docker container if it exists
-//         sh 'docker rm -f my-app || true'
-//         sh 'docker rmi my-app || true'
-        cleanWs()
+      // Remove the Docker container if it exists
+      sh 'docker rm -f my-app || true'
+      sh 'docker rmi my-app || true'
+      cleanWs()
     }
   }
 }
