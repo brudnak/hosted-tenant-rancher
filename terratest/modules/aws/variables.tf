@@ -68,8 +68,3 @@ variable "aws_route53_fqdn" {
   type        = string
   description = "The fully qualified domain name to use."
 }
-
-variable "local_path_aws_pem" {
-  type        = string
-  description = "Local machine path to pem file used to ssh into AWS instances."
-}

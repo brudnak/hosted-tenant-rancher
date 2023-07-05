@@ -43,7 +43,6 @@ func TestCreateHostedTenantRancher(t *testing.T) {
 		viper.GetString("tf_vars.aws_pem_key_name"),
 		viper.GetString("tf_vars.aws_rds_password"),
 		viper.GetString("tf_vars.aws_route53_fqdn"),
-		viper.GetString("tf_vars.local_path_aws_pem"),
 	)
 
 	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{

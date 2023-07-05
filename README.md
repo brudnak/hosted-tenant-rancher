@@ -5,15 +5,18 @@
 There should be a file named `config.yml` that sits at the top level of this repository sitting next to the `README.md`. It should match the following, replaced with your values.
 
 ```yml
-local:
-  pem_path: your-local-path-to-aws-pem-file
+aws:
+  rsa_private_key: |
+    -----BEGIN RSA PRIVATE KEY-----
+    YOUR-PRIVATE-KEY-HERE
+    -----END RSA PRIVATE KEY-----
 rancher:
   bootstrap_password: whatever-rancher-bootstrap-password-you-want
-  version: 2.7.4
-  image_tag: v2.7.4
+  version: 2.7.5
+  image_tag: v2.7.5
   psp_bool: false
 k3s:
-  version: v1.23.6+k3s1
+  version: v1.25.10+k3s1
 tf_vars:
   aws_access_key: your-aws-access-key
   aws_secret_key: your-aws-secret-key
@@ -30,8 +33,9 @@ tf_vars:
   aws_route53_fqdn: something.something.something
   local_path_aws_pem: your-local-path-to-aws-pem-file
 upgrade:
-  version: 2.7.4
-  image_tag: v2.7-head
+  version: 2.7.5-rc5
+  image_tag: v2.7.5-rc5
+
 ```
 
 ## Run

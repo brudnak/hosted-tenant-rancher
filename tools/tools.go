@@ -69,7 +69,7 @@ func (t *Tools) K3SHostInstall(config K3SConfig) (int, string) {
 
 	k3sVersion := viper.GetString("k3s.version")
 
-	nodeOneCommand := fmt.Sprintf(`curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='%s' sh -s - server --token=SECRET --datastore-endpoint='mysql://tfadmin:%s@tcp(%s)/k3s' --tls-san %s --node-external-ip %s`, k3sVersion, config.DBPassword, config.DBEndpoint, config.RancherURL, config.Node1IP)
+	nodeOneCommand := nodeCommandBuilder(k3sVersion, "SECRET", config.DBPassword, config.DBEndpoint, config.RancherURL, config.Node1IP)
 
 	_, err := t.RunCommand(nodeOneCommand, config.Node1IP)
 	if err != nil {
@@ -92,7 +92,7 @@ func (t *Tools) K3SHostInstall(config K3SConfig) (int, string) {
 		log.Println("node one is not ready: %w", err)
 	}
 
-	nodeTwoCommand := fmt.Sprintf(`curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='%s' sh -s - server --token=%s --datastore-endpoint='mysql://tfadmin:%s@tcp(%s)/k3s' --tls-san %s --node-external-ip %s`, k3sVersion, token, config.DBPassword, config.DBEndpoint, config.RancherURL, config.Node2IP)
+	nodeTwoCommand := nodeCommandBuilder(k3sVersion, token, config.DBPassword, config.DBEndpoint, config.RancherURL, config.Node2IP)
 	_, err = t.RunCommand(nodeTwoCommand, config.Node2IP)
 	if err != nil {
 		log.Println(err)
@@ -152,7 +152,7 @@ func (t *Tools) K3STenantInstall(config K3SConfig) (int, string) {
 
 	k3sVersion := viper.GetString("k3s.version")
 
-	nodeOneCommand := fmt.Sprintf(`curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='%s' sh -s - server --token=SECRET --datastore-endpoint='mysql://tfadmin:%s@tcp(%s)/k3s' --tls-san %s --node-external-ip %s`, k3sVersion, config.DBPassword, config.DBEndpoint, config.RancherURL, config.Node1IP)
+	nodeOneCommand := nodeCommandBuilder(k3sVersion, "SECRET", config.DBPassword, config.DBEndpoint, config.RancherURL, config.Node1IP)
 
 	_, err := t.RunCommand(nodeOneCommand, config.Node1IP)
 	if err != nil {
@@ -175,7 +175,7 @@ func (t *Tools) K3STenantInstall(config K3SConfig) (int, string) {
 		log.Println("node one is not ready: %w", err)
 	}
 
-	nodeTwoCommand := fmt.Sprintf(`curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='%s' sh -s - server --token=%s --datastore-endpoint='mysql://tfadmin:%s@tcp(%s)/k3s' --tls-san %s --node-external-ip %s`, k3sVersion, token, config.DBPassword, config.DBEndpoint, config.RancherURL, config.Node2IP)
+	nodeTwoCommand := nodeCommandBuilder(k3sVersion, token, config.DBPassword, config.DBEndpoint, config.RancherURL, config.Node2IP)
 	_, err = t.RunCommand(nodeTwoCommand, config.Node2IP)
 	if err != nil {
 		log.Println(err)
@@ -325,16 +325,11 @@ func (t *Tools) CreateToken(url string, password string) string {
 
 func (t *Tools) RunCommand(cmd string, pubIP string) (string, error) {
 
-	path := viper.GetString("local.pem_path")
+	pemKey := viper.GetString("aws.rsa_private_key")
 
 	dialIP := fmt.Sprintf("%s:22", pubIP)
 
-	pemBytes, err := os.ReadFile(path)
-	if err != nil {
-		return "", fmt.Errorf("failed to read pem file: %w", err)
-	}
-
-	signer, err := ssh.ParsePrivateKey(pemBytes)
+	signer, err := ssh.ParsePrivateKey([]byte(pemKey))
 	if err != nil {
 		return "", fmt.Errorf("failed to parse private key: %w", err)
 	}
@@ -520,4 +515,8 @@ func (t *Tools) SetupImport(url string, password string, ip string) {
 		fmt.Println("error setup import:", err)
 		return
 	}
+}
+
+func nodeCommandBuilder(version, secret, password, endpoint, url, ip string) string {
+	return fmt.Sprintf(`curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='%s' sh -s - server --token=%s --datastore-endpoint='mysql://tfadmin:%s@tcp(%s)/k3s' --tls-san %s --node-external-ip %s`, version, secret, password, endpoint, url, ip)
 }
