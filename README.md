@@ -6,12 +6,24 @@ Currently able
 to run from Jenkins
 when using a Multi-line String Parameter
 named `CONFIG` and pasting in your version of the `config.yml` file shown below.
+You'll need to provide an existing s3 bucket name in your config
+when running from Jenkins. This will hold your terraform state file so that you can run cleanup from Jenkins.
+
+## Jenkins Cleanup
+
+Can now run cleanup from Jenkins!
+You need an existing s3 bucket when creating / destroying from Jenkins.
+However, once you have this bucket, you can always use it,
+as the cleanup script also cleans up the terraform state file from s3.
 
 ## Setup
 
 There should be a file named `config.yml` that sits at the top level of this repository sitting next to the `README.md`. It should match the following, replaced with your values.
 
 ```yml
+s3:
+  bucket: name-of-your-s3-bucket-that-you-already-have-created
+  region: us-east-2
 aws:
   rsa_private_key: |
     -----BEGIN RSA PRIVATE KEY-----
