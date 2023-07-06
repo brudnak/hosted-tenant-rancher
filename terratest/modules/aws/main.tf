@@ -6,6 +6,7 @@ terraform {
       version = "3.74.0"
     }
   }
+  backend "s3" {}
 }
 
 module "high-availability-infrastructure-1" {

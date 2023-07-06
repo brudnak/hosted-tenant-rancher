@@ -1,12 +1,15 @@
 package test
 
 import (
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/brudnak/hosted-tenant-rancher/tools/hcl"
 	"log"
 	"os"
 	"testing"
 
 	toolkit "github.com/brudnak/hosted-tenant-rancher/tools"
-	"github.com/brudnak/hosted-tenant-rancher/tools/hcl"
 	"github.com/spf13/viper"
 
 	"github.com/gruntwork-io/terratest/modules/terraform"
@@ -21,36 +24,18 @@ var tools toolkit.Tools
 
 func TestCreateHostedTenantRancher(t *testing.T) {
 
-	viper.AddConfigPath("../../")
-	viper.SetConfigName("config")
-	viper.SetConfigType("yml")
-	err := viper.ReadInConfig()
-
-	if err != nil {
-		log.Println("error reading config:", err)
-	}
-
-	hcl.GenAwsVar(
-		viper.GetString("tf_vars.aws_access_key"),
-		viper.GetString("tf_vars.aws_secret_key"),
-		viper.GetString("tf_vars.aws_prefix"),
-		viper.GetString("tf_vars.aws_vpc"),
-		viper.GetString("tf_vars.aws_subnet_a"),
-		viper.GetString("tf_vars.aws_subnet_b"),
-		viper.GetString("tf_vars.aws_subnet_c"),
-		viper.GetString("tf_vars.aws_ami"),
-		viper.GetString("tf_vars.aws_subnet_id"),
-		viper.GetString("tf_vars.aws_security_group_id"),
-		viper.GetString("tf_vars.aws_pem_key_name"),
-		viper.GetString("tf_vars.aws_rds_password"),
-		viper.GetString("tf_vars.aws_route53_fqdn"),
-	)
-
-	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
-
+	createAWSVar()
+	os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))
+	os.Setenv("AWS_SECRET_ACCESS_KEY", viper.GetString("tf_vars.aws_secret_key"))
+	terraformOptions := &terraform.Options{
 		TerraformDir: "../modules/aws",
 		NoColor:      true,
-	})
+		BackendConfig: map[string]interface{}{
+			"bucket": viper.GetString("s3.bucket"),
+			"key":    "terraform.tfstate",
+			"region": viper.GetString("s3.region"),
+		},
+	}
 
 	terraform.InitAndApply(t, terraformOptions)
 
@@ -185,6 +170,24 @@ func TestUpgradeTenantRancher(t *testing.T) {
 	terraform.InitAndApply(t, terraformOptions)
 }
 
+func TestJenkinsCleanup(t *testing.T) {
+	createAWSVar()
+	os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))
+	os.Setenv("AWS_SECRET_ACCESS_KEY", viper.GetString("tf_vars.aws_secret_key"))
+	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
+		TerraformDir: "../modules/aws",
+		NoColor:      true,
+		BackendConfig: map[string]interface{}{
+			"bucket": viper.GetString("s3.bucket"),
+			"key":    "terraform.tfstate",
+			"region": viper.GetString("s3.region"),
+		},
+	})
+	terraform.Init(t, terraformOptions)
+	terraform.Destroy(t, terraformOptions)
+	defer deleteS3Object(viper.GetString("s3.bucket"), "terraform.tfstate")
+}
+
 func TestHostCleanup(t *testing.T) {
 	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
 		TerraformDir: "../modules/aws",
@@ -244,4 +247,68 @@ func cleanupFolders(paths ...string) {
 			log.Println("error removing folder", err)
 		}
 	}
+}
+
+func createAWSVar() {
+	viper.AddConfigPath("../../")
+	viper.SetConfigName("config")
+	viper.SetConfigType("yml")
+	err := viper.ReadInConfig()
+
+	if err != nil {
+		log.Println("error reading config:", err)
+	}
+
+	hcl.GenAwsVar(
+		viper.GetString("tf_vars.aws_access_key"),
+		viper.GetString("tf_vars.aws_secret_key"),
+		viper.GetString("tf_vars.aws_prefix"),
+		viper.GetString("tf_vars.aws_vpc"),
+		viper.GetString("tf_vars.aws_subnet_a"),
+		viper.GetString("tf_vars.aws_subnet_b"),
+		viper.GetString("tf_vars.aws_subnet_c"),
+		viper.GetString("tf_vars.aws_ami"),
+		viper.GetString("tf_vars.aws_subnet_id"),
+		viper.GetString("tf_vars.aws_security_group_id"),
+		viper.GetString("tf_vars.aws_pem_key_name"),
+		viper.GetString("tf_vars.aws_rds_password"),
+		viper.GetString("tf_vars.aws_route53_fqdn"),
+	)
+}
+
+// deleteS3Object deletes an object from a specified S3 bucket
+func deleteS3Object(bucket string, item string) error {
+
+	viper.AddConfigPath("../../")
+	viper.SetConfigName("config")
+	viper.SetConfigType("yml")
+	err := viper.ReadInConfig()
+
+	os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))
+	os.Setenv("AWS_SECRET_ACCESS_KEY", viper.GetString("tf_vars.aws_secret_key"))
+
+	if err != nil {
+		log.Println("error reading config:", err)
+	}
+
+	sess, _ := session.NewSession(&aws.Config{
+		Region: aws.String(viper.GetString("s3.region"))},
+	)
+
+	svc := s3.New(sess)
+
+	_, err = svc.DeleteObject(&s3.DeleteObjectInput{Bucket: aws.String(bucket), Key: aws.String(item)})
+	if err != nil {
+		return err
+	}
+
+	err = svc.WaitUntilObjectNotExists(&s3.HeadObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(item),
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
