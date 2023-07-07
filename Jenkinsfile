@@ -21,7 +21,7 @@ pipeline {
           def dockerImage = docker.image('my-app') // Assuming 'my-app' is your Docker image name
 
           dockerImage.inside() {
-            sh "go test -v -timeout 1h -run TestCreateHostedTenantRancher ./terratest/test"
+            sh "go test -v -timeout 1h -run TestCreateHostedTenantRancher -mod=vendor ./terratest/test"
           }
         }
       }
@@ -33,7 +33,7 @@ pipeline {
       // Remove the Docker container if it exists
       sh 'docker rm -f my-app || true'
       sh 'docker rmi my-app || true'
-      cleanWs()
+      // cleanWs() // unavailable in rancher jenkins
     }
   }
 }
