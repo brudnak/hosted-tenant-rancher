@@ -2,6 +2,7 @@ package test
 
 import (
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/brudnak/hosted-tenant-rancher/tools/hcl"
@@ -23,6 +24,11 @@ var configIp string
 var tools toolkit.Tools
 
 func TestCreateHostedTenantRancher(t *testing.T) {
+
+	err := checkS3ObjectExists("terraform.tfstate")
+	if err != nil {
+		log.Fatal("Error checking if tfstate exists in s3:", err)
+	}
 
 	createAWSVar()
 	os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))
@@ -310,5 +316,46 @@ func deleteS3Object(bucket string, item string) error {
 		return err
 	}
 
+	return nil
+}
+
+// checkS3ObjectExists checks if an object already exists in a specified S3 bucket
+func checkS3ObjectExists(item string) error {
+
+	viper.AddConfigPath("../../")
+	viper.SetConfigName("config")
+	viper.SetConfigType("yml")
+	err := viper.ReadInConfig()
+
+	os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))
+	os.Setenv("AWS_SECRET_ACCESS_KEY", viper.GetString("tf_vars.aws_secret_key"))
+
+	if err != nil {
+		log.Println("error reading config:", err)
+	}
+
+	sess, _ := session.NewSession(&aws.Config{
+		Region: aws.String(viper.GetString("s3.region"))},
+	)
+
+	bucket := viper.GetString("s3.bucket")
+
+	svc := s3.New(sess)
+
+	_, err = svc.HeadObject(&s3.HeadObjectInput{Bucket: aws.String(bucket), Key: aws.String(item)})
+	if err != nil {
+		// If the error is due to the file, not existing, that's fine, and we return nil.
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			case s3.ErrCodeNoSuchKey:
+				return nil
+			}
+		}
+		// Otherwise, we return the error as it might be due to a network issue or something else.
+		return err
+	}
+
+	// If we get to this point, it means the file exists, so we log an error message and exit the program.
+	log.Fatalf("A tfstate file already exists in bucket %s. Please clean up the old hosted/tenant environment before creating a new one.", bucket)
 	return nil
 }
