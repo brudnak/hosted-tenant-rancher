@@ -3,6 +3,7 @@ FROM golang:1.19
 
 ENV GOPATH /root/go
 ENV PATH ${PATH}:/root/go/bin
+ENV GOCACHE=off
 
 # Configure Terraform
 ARG TERRAFORM_VERSION=1.5.0
