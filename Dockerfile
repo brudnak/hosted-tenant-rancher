@@ -1,7 +1,6 @@
 # Start from the latest golang base image
 FROM golang:1.19
 
-# Set the GOPATH and PATH
 ENV GOPATH /root/go
 ENV PATH ${PATH}:/root/go/bin
 
@@ -30,33 +29,27 @@ RUN apt-get update && apt-get install -y apt-transport-https ca-certificates cur
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Create the group before creating the user
-RUN groupadd -g 112 groupname
-
-# Create the user
-RUN useradd -r -u 106 -g 112 jenkins
-
-# Grant the user permissions to necessary directories
-RUN mkdir -p $GOPATH/src/github.com/brudnak/hosted-tenant-rancher && chown -R jenkins:groupname $GOPATH
-
 # Set the Current Working Directory inside the container
 WORKDIR $GOPATH/src/github.com/brudnak/hosted-tenant-rancher
 
-# Switch to the 'jenkins' user
-USER jenkins
-
 # Copy go mod and sum files
-COPY --chown=jenkins:groupname ["./", "$GOPATH/src/github.com/brudnak/hosted-tenant-rancher"]
+COPY [".", "$GOPATH/src/github.com/brudnak/hosted-tenant-rancher"]
 
 # Download all dependencies. Dependencies will be cached if the go.mod and go.sum files are not changed
 RUN go mod download
 
 # Copy the source from the current directory to the Working Directory inside the container
-COPY --chown=jenkins:groupname . .
+COPY . .
 
 # Copy the config file into the container
 ARG CONFIG_FILE
-COPY --chown=jenkins:groupname ${CONFIG_FILE} /config.yml
+COPY ${CONFIG_FILE} /config.yml
+
+# Create the group before creating the user
+RUN groupadd -g 112 groupname
+
+RUN useradd -r -u 106 -g 112 jenkins
+RUN chmod -R 777 /home
 
 # This container will be executable
 SHELL ["/bin/bash", "-c"]
