@@ -1,9 +1,9 @@
 # Start from the latest golang base image
 FROM golang:1.19
 
-ENV GOPATH /tmp/gopath
 ENV PATH ${PATH}:/root/go/bin
-ENV GOCACHE=off
+ENV GOCACHE=/tmp/go-cache
+ENV GOPATH=/tmp/go-path
 
 # Configure Terraform
 ARG TERRAFORM_VERSION=1.5.0
