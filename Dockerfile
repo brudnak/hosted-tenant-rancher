@@ -4,6 +4,7 @@ FROM golang:1.19
 ENV PATH ${PATH}:/root/go/bin
 ENV GOCACHE=/tmp/go-cache
 ENV GOPATH=/tmp/go-path
+ENV HELM_CACHE_HOME=/tmp/helm-cache
 
 # Configure Terraform
 ARG TERRAFORM_VERSION=1.5.0
