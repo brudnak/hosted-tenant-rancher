@@ -5,8 +5,8 @@ ENV PATH ${PATH}:/root/go/bin
 ENV GOCACHE=/tmp/go-cache
 ENV GOPATH=/tmp/go-path
 ENV HELM_CACHE_HOME=/tmp/helm-cache
-ENV PLAYWRIGHT_BROWSERS_PATH=/tmp/playwright
-ENV PLAYWRIGHT_CACHE_PATH=/tmp/playwright/.cache
+
+RUN mkdir /.cache && chmod 777 /.cache
 
 # Configure Terraform
 ARG TERRAFORM_VERSION=1.5.0
