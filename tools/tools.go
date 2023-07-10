@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/brudnak/hosted-tenant-rancher/tools/hcl"
 	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/launcher"
 	"golang.org/x/crypto/ssh"
 	"io"
 	"log"
@@ -488,7 +489,12 @@ func (t *Tools) WorkAround(url, password string) {
 
 	loginUrl := fmt.Sprintf("https://%s/dashboard/auth/login", url)
 
-	browser := rod.New().MustConnect().NoDefaultDevice()
+	launch, _ := launcher.New().
+		Headless(true).        // run browser in headless mode
+		Set("no-sandbox", ""). // set no-sandbox flag
+		Launch()
+
+	browser := rod.New().ControlURL(launch).MustConnect().NoDefaultDevice()
 	page := browser.MustPage(loginUrl).MustWindowFullscreen()
 
 	page.MustElement("#password > div > input[type=password]").MustInput(password)
