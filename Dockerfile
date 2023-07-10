@@ -1,7 +1,7 @@
 # Start from the latest golang base image
 FROM golang:1.19
 
-ENV GOPATH /root/go
+ENV GOPATH /tmp/gopath
 ENV PATH ${PATH}:/root/go/bin
 ENV GOCACHE=off
 
