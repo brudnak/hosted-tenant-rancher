@@ -6,6 +6,7 @@ ENV GOCACHE=/tmp/go-cache
 ENV GOPATH=/tmp/go-path
 ENV HELM_CACHE_HOME=/tmp/helm-cache
 ENV PLAYWRIGHT_BROWSERS_PATH=/tmp/playwright
+ENV PLAYWRIGHT_CACHE_PATH=/tmp/playwright/.cache
 
 # Configure Terraform
 ARG TERRAFORM_VERSION=1.5.0

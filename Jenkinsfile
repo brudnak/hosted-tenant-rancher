@@ -21,9 +21,10 @@ pipeline {
           def dockerImage = docker.image('my-app') // Assuming 'my-app' is your Docker image name
 
           dockerImage.inside() {
-            withEnv(["PLAYWRIGHT_BROWSERS_PATH=/tmp/playwright"]) {
+            withEnv(["PLAYWRIGHT_BROWSERS_PATH=/tmp/playwright", "PLAYWRIGHT_CACHE_PATH=/tmp/playwright/.cache"]) {
               sh "echo LOOK HERE"
               sh "echo $PLAYWRIGHT_BROWSERS_PATH"
+              sh "echo $PLAYWRIGHT_CACHE_PATH"
               sh "go test -v -timeout 1h -run TestCreateHostedTenantRancher -count=1 ./terratest/test"
             }
           }
