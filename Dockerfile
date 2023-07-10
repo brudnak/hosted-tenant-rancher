@@ -2,6 +2,7 @@
 FROM golang:1.19
 
 ENV GOPATH /root/go
+ENV GOCACHE /root/go-cache
 ENV PATH ${PATH}:/root/go/bin
 
 # Configure Terraform
@@ -50,6 +51,7 @@ RUN groupadd -g 112 groupname
 
 RUN useradd -r -u 106 -g 112 jenkins
 RUN chmod -R 777 /home
+RUN mkdir -p $GOCACHE && chown -R jenkins:groupname $GOCACHE
 
 # This container will be executable
 SHELL ["/bin/bash", "-c"]
