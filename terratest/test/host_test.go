@@ -319,9 +319,7 @@ func deleteS3Object(bucket string, item string) error {
 	return nil
 }
 
-// checkS3ObjectExists checks if an object already exists in a specified S3 bucket
 func checkS3ObjectExists(item string) error {
-
 	viper.AddConfigPath("../../")
 	viper.SetConfigName("config")
 	viper.SetConfigType("yml")
@@ -344,10 +342,10 @@ func checkS3ObjectExists(item string) error {
 
 	_, err = svc.HeadObject(&s3.HeadObjectInput{Bucket: aws.String(bucket), Key: aws.String(item)})
 	if err != nil {
-		// If the error is due to the file, not existing, that's fine, and we return nil.
+		// If the error is due to the file not existing, that's fine, and we return nil.
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
-			case s3.ErrCodeNoSuchKey:
+			case s3.ErrCodeNoSuchKey, "NotFound":
 				return nil
 			}
 		}
