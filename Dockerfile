@@ -2,6 +2,8 @@
 FROM golang:1.19
 
 USER root
+RUN mkdir /.cache && chown -R jenkins:jenkins /.cache
+USER jenkins
 
 # Configure Terraform
 ARG TERRAFORM_VERSION=1.5.0
