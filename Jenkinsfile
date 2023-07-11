@@ -1,9 +1,12 @@
 pipeline {
-  agent any
+    agent any
 
-stage('Show user') {
-    steps {
-        sh 'LOOK HERE vvvvvv'
-        sh 'whoami'
+    stages {
+        stage('Show user') {
+            steps {
+                echo 'LOOK HERE vvvvvv'
+                sh(script: 'whoami')
+            }
+        }
     }
 }
