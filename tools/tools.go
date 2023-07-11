@@ -486,8 +486,7 @@ func (t *Tools) GetManifestUrl(url string, token string) string {
 
 func (t *Tools) CallBashScript(serverUrl, rancherToken string) error {
 
-	makeExecutable("/scripts/server-url-update.sh")
-	cmd := exec.Command("/bin/bash", "/scripts/server-url-update.sh") // Replace with the path to your script
+	cmd := exec.Command("/bin/bash", "./scripts/server-url-update.sh") // Replace with the path to your script
 
 	// Set environment variables
 	cmd.Env = append(cmd.Env,
@@ -522,11 +521,4 @@ func (t *Tools) SetupImport(url string, password string, ip string) {
 
 func nodeCommandBuilder(version, secret, password, endpoint, url, ip string) string {
 	return fmt.Sprintf(`curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='%s' sh -s - server --token=%s --datastore-endpoint='mysql://tfadmin:%s@tcp(%s)/k3s' --tls-san %s --node-external-ip %s`, version, secret, password, endpoint, url, ip)
-}
-
-func makeExecutable(path string) {
-	err := os.Chmod(path, 0755)
-	if err != nil {
-		log.Fatal(err)
-	}
 }
