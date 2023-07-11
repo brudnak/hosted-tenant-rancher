@@ -509,12 +509,22 @@ func (t *Tools) WorkAroundChecks(url, password string) {
 
 	loginUrl := fmt.Sprintf("https://%s/dashboard/auth/login", url)
 
+	log.Println("Setting up launcher.new")
 	launch := launcher.New().Logger(log.Writer()).Headless(true).Set("no-sandbox", "").MustLaunch()
+	log.Println("AFTER: Setting up launcher.new")
+
+	log.Println("Setting up browser with rod.new")
 	browser := rod.New().ControlURL(launch).MustConnect().NoDefaultDevice()
+	log.Println("AFTER: Setting up browser with rod.new")
 
+	log.Println("must page before")
 	page := browser.MustPage(loginUrl)
+	log.Println("must page after")
 
+	// Add logging before and after critical steps
+	log.Println("Entering password...")
 	page.MustElement("#password > div > input[type=password]").MustInput(password)
+	log.Println("Clicking submit button...")
 	page.MustElement("#submit").MustClick()
 	time.Sleep(5 * time.Second)
 
@@ -524,7 +534,6 @@ func (t *Tools) WorkAroundChecks(url, password string) {
 	time.Sleep(5 * time.Second)
 	page.MustElement("#submit > button").MustClick()
 }
-
 func (t *Tools) SetupImport(url string, password string, ip string) {
 
 	adminToken := t.CreateToken(url, password)
