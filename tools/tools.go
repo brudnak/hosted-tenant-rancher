@@ -6,14 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/brudnak/hosted-tenant-rancher/tools/hcl"
-	"github.com/go-rod/rod"
-	"github.com/go-rod/rod/lib/launcher"
 	"golang.org/x/crypto/ssh"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -485,55 +484,27 @@ func (t *Tools) GetManifestUrl(url string, token string) string {
 	return regResponse.Data[0].ManifestURL
 }
 
-func (t *Tools) WorkAround(url, password string) {
+func (t *Tools) CallBashScript(serverUrl, rancherToken string) error {
 
-	loginUrl := fmt.Sprintf("https://%s/dashboard/auth/login", url)
+	makeExecutable("/scripts/server-url-update.sh")
+	cmd := exec.Command("/bin/bash", "/scripts/server-url-update.sh") // Replace with the path to your script
 
-	launch := launcher.New().Logger(log.Writer()).Headless(true).Set("no-sandbox", "").MustLaunch()
-	browser := rod.New().ControlURL(launch).MustConnect().NoDefaultDevice()
+	// Set environment variables
+	cmd.Env = append(cmd.Env,
+		fmt.Sprintf("SERVER_URL=%s", serverUrl),
+		fmt.Sprintf("RANCHER_TOKEN=%s", rancherToken),
+	)
 
-	page := browser.MustPage(loginUrl)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Fatalf("cmd.Run() failed with %s\n", err)
+	}
 
-	page.MustElement("#password > div > input[type=password]").MustInput(password)
-	page.MustElement("#submit").MustClick()
-	time.Sleep(5 * time.Second)
+	fmt.Printf("combined out:\n%s\n", string(out))
 
-	page.MustElement("#__layout > main > div > form > div > div.col.span-6.form-col > div:nth-child(2) > div.checkbox.mt-40 > div > label > span.checkbox-label").MustClick()
-	page.MustElement("#__layout > main > div > form > div > div.col.span-6.form-col > div:nth-child(2) > div.checkbox.pt-10.eula > div > label > span.checkbox-custom").MustClick()
-
-	time.Sleep(5 * time.Second)
-	page.MustElement("#submit > button").MustClick()
+	return err
 }
 
-func (t *Tools) WorkAroundChecks(url, password string) {
-
-	loginUrl := fmt.Sprintf("https://%s/dashboard/auth/login", url)
-
-	fmt.Println("Setting up launcher.new")
-	launch := launcher.New().Logger(log.Writer()).Headless(true).Set("no-sandbox", "").MustLaunch()
-	fmt.Println("AFTER: Setting up launcher.new")
-
-	fmt.Println("Setting up browser with rod.new")
-	browser := rod.New().ControlURL(launch).MustConnect().NoDefaultDevice()
-	fmt.Println("AFTER: Setting up browser with rod.new")
-
-	fmt.Println("must page before")
-	page := browser.MustPage(loginUrl)
-	fmt.Println("must page after")
-
-	// Add logging before and after critical steps
-	fmt.Println("Entering password...")
-	page.MustElement("#password > div > input[type=password]").MustInput(password)
-	fmt.Println("Clicking submit button...")
-	page.MustElement("#submit").MustClick()
-	time.Sleep(5 * time.Second)
-
-	page.MustElement("#__layout > main > div > form > div > div.col.span-6.form-col > div:nth-child(2) > div.checkbox.mt-40 > div > label > span.checkbox-label").MustClick()
-	page.MustElement("#__layout > main > div > form > div > div.col.span-6.form-col > div:nth-child(2) > div.checkbox.pt-10.eula > div > label > span.checkbox-custom").MustClick()
-
-	time.Sleep(5 * time.Second)
-	page.MustElement("#submit > button").MustClick()
-}
 func (t *Tools) SetupImport(url string, password string, ip string) {
 
 	adminToken := t.CreateToken(url, password)
@@ -551,4 +522,11 @@ func (t *Tools) SetupImport(url string, password string, ip string) {
 
 func nodeCommandBuilder(version, secret, password, endpoint, url, ip string) string {
 	return fmt.Sprintf(`curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='%s' sh -s - server --token=%s --datastore-endpoint='mysql://tfadmin:%s@tcp(%s)/k3s' --tls-san %s --node-external-ip %s`, version, secret, password, endpoint, url, ip)
+}
+
+func makeExecutable(path string) {
+	err := os.Chmod(path, 0755)
+	if err != nil {
+		log.Fatal(err)
+	}
 }

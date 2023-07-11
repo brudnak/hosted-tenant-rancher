@@ -8,13 +8,6 @@ RUN mkdir -p /.cache && chmod -R 777 /.cache
 ARG TERRAFORM_VERSION=1.5.0
 RUN wget https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip && apt-get update && apt-get install -y unzip && unzip terraform_${TERRAFORM_VERSION}_linux_amd64.zip && rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip && chmod u+x terraform && mv terraform /usr/bin/terraform
 
-# Install Google Chrome
-RUN apt-get update && apt-get install -y wget gnupg2 unzip \
-    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
-    && echo "deb http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list \
-    && apt-get update && apt-get install -y google-chrome-stable \
-    && rm -rf /var/lib/apt/lists/*
-
 # Install Helm
 RUN wget -q https://get.helm.sh/helm-v3.7.0-linux-amd64.tar.gz && \
     tar -xzf helm-v3.7.0-linux-amd64.tar.gz && \

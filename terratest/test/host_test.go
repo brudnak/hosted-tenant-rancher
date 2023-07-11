@@ -133,10 +133,14 @@ func TestUpgradeHostRancher(t *testing.T) {
 
 func TestSetupImport(t *testing.T) {
 
-	tools.WorkAround(hostUrl, password)
+	token := tools.CreateToken(hostUrl, password)
+	err := tools.CallBashScript(hostUrl, token)
+	if err != nil {
+		log.Println("error calling bash script", err)
+	}
 	tools.SetupImport(hostUrl, password, configIp)
 
-	err := os.Setenv("KUBECONFIG", "theconfig.yml")
+	err = os.Setenv("KUBECONFIG", "theconfig.yml")
 	if err != nil {
 		log.Println("error setting env", err)
 	}
@@ -174,19 +178,6 @@ func TestUpgradeTenantRancher(t *testing.T) {
 		NoColor:      true,
 	})
 	terraform.InitAndApply(t, terraformOptions)
-}
-
-func TestGoRod(t *testing.T) {
-
-	viper.AddConfigPath("../../")
-	viper.SetConfigName("config")
-	viper.SetConfigType("yml")
-	err := viper.ReadInConfig()
-	if err != nil {
-		log.Println("error reading config:", err)
-	}
-
-	tools.WorkAroundChecks(viper.GetString("temp.url"), viper.GetString("temp.pw"))
 }
 
 func TestJenkinsCleanup(t *testing.T) {
