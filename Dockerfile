@@ -1,12 +1,7 @@
 # Start from the latest golang base image
 FROM golang:1.19
 
-ENV PATH ${PATH}:/root/go/bin
-ENV GOCACHE=/tmp/go-cache
-ENV GOPATH=/tmp/go-path
-ENV HELM_CACHE_HOME=/tmp/helm-cache
-
-RUN mkdir /.cache && chmod 777 /.cache
+USER root
 
 # Configure Terraform
 ARG TERRAFORM_VERSION=1.5.0
@@ -48,6 +43,12 @@ COPY . .
 # Copy the config file into the container
 ARG CONFIG_FILE
 COPY ${CONFIG_FILE} /config.yml
+
+# Create the group before creating the user
+RUN groupadd -g 112 groupname
+
+RUN useradd -r -u 106 -g 112 jenkins
+RUN chmod -R 777 /home
 
 # This container will be executable
 SHELL ["/bin/bash", "-c"]
