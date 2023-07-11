@@ -4,6 +4,7 @@ FROM golang:1.19
 USER root
 RUN mkdir /.cache && chown -R root:root /.cache
 
+
 # Configure Terraform
 ARG TERRAFORM_VERSION=1.5.0
 RUN wget https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip && apt-get update && apt-get install -y unzip && unzip terraform_${TERRAFORM_VERSION}_linux_amd64.zip && rm terraform_${TERRAFORM_VERSION}_linux_amd64.zip && chmod u+x terraform && mv terraform /usr/bin/terraform
