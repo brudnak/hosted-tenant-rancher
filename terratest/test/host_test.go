@@ -176,6 +176,19 @@ func TestUpgradeTenantRancher(t *testing.T) {
 	terraform.InitAndApply(t, terraformOptions)
 }
 
+func TestGoRod(t *testing.T) {
+
+	viper.AddConfigPath("../../")
+	viper.SetConfigName("config")
+	viper.SetConfigType("yml")
+	err := viper.ReadInConfig()
+	if err != nil {
+		log.Println("error reading config:", err)
+	}
+
+	tools.WorkAroundChecks(viper.GetString("temp.url"), viper.GetString("temp.pw"))
+}
+
 func TestJenkinsCleanup(t *testing.T) {
 	createAWSVar()
 	os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))

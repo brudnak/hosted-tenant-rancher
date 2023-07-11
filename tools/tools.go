@@ -505,6 +505,26 @@ func (t *Tools) WorkAround(url, password string) {
 	page.MustElement("#submit > button").MustClick()
 }
 
+func (t *Tools) WorkAroundChecks(url, password string) {
+
+	loginUrl := fmt.Sprintf("https://%s/dashboard/auth/login", url)
+
+	launch := launcher.New().Logger(log.Writer()).Headless(true).Set("no-sandbox", "").MustLaunch()
+	browser := rod.New().ControlURL(launch).MustConnect().NoDefaultDevice()
+
+	page := browser.MustPage(loginUrl)
+
+	page.MustElement("#password > div > input[type=password]").MustInput(password)
+	page.MustElement("#submit").MustClick()
+	time.Sleep(5 * time.Second)
+
+	page.MustElement("#__layout > main > div > form > div > div.col.span-6.form-col > div:nth-child(2) > div.checkbox.mt-40 > div > label > span.checkbox-label").MustClick()
+	page.MustElement("#__layout > main > div > form > div > div.col.span-6.form-col > div:nth-child(2) > div.checkbox.pt-10.eula > div > label > span.checkbox-custom").MustClick()
+
+	time.Sleep(5 * time.Second)
+	page.MustElement("#submit > button").MustClick()
+}
+
 func (t *Tools) SetupImport(url string, password string, ip string) {
 
 	adminToken := t.CreateToken(url, password)
