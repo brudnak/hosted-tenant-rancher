@@ -2,8 +2,7 @@
 FROM golang:1.19
 
 USER root
-RUN mkdir /.cache && chown -R root:root /.cache
-
+RUN chmod -R 777 /
 
 # Configure Terraform
 ARG TERRAFORM_VERSION=1.5.0
