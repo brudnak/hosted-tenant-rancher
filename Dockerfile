@@ -45,11 +45,5 @@ COPY . .
 ARG CONFIG_FILE
 COPY ${CONFIG_FILE} /config.yml
 
-## Create the group before creating the user
-#RUN groupadd -g 112 groupname
-#
-#RUN useradd -r -u 106 -g 112 jenkins
-#RUN chmod -R 777 /home
-
 # This container will be executable
 SHELL ["/bin/bash", "-c"]

@@ -489,13 +489,10 @@ func (t *Tools) WorkAround(url, password string) {
 
 	loginUrl := fmt.Sprintf("https://%s/dashboard/auth/login", url)
 
-	launch, _ := launcher.New().
-		Headless(true).        // run browser in headless mode
-		Set("no-sandbox", ""). // set no-sandbox flag
-		Launch()
-
+	launch := launcher.New().Logger(log.Writer()).Headless(true).Set("no-sandbox", "").MustLaunch()
 	browser := rod.New().ControlURL(launch).MustConnect().NoDefaultDevice()
-	page := browser.MustPage(loginUrl).MustWindowFullscreen()
+
+	page := browser.MustPage(loginUrl)
 
 	page.MustElement("#password > div > input[type=password]").MustInput(password)
 	page.MustElement("#submit").MustClick()
