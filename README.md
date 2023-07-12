@@ -1,26 +1,34 @@
-# Hosted / Tenant Rancher
+# Hosted/Tenant Rancher
+
+This guide walks you through running and managing a Hosted/Tenant Rancher using Jenkins.
 
 ## Running in Jenkins
 
-##### Prerequisites
+### Prerequisites
 
-You'll need to create a s3 bucket in AWS us-east-2 specifically for this Jenkins job to use.
-It will store the Terraform state file.
-Naming it something like "<your-initials>-hosted-tenant-tf", and putting that name in the configuration file below.
-You'll only be able to create 1 hosted/tenant setup at a time.
-If you try running it again, there is a check for an existing state file and it will fail.
-So before running the job again,
-you'll need to run the Jenkins cleanup job which will run a `terrafor destroy` on the infrastructure,
-and also cleanup the state file in the s3 bucket.
+1. An existing S3 bucket dedicated to this task.
+    - You only need to create this once and can reuse it for all future runs.
+    - A Jenkins cleanup job will delete the Terraform state file in the S3 bucket.
 
-##### Estimated Time
+2. A completed configuration file (see the Config File Setup section). Copy and paste the YAML into the Jenkins job.
 
-The job takes about `~15 minutes` to run for either creation and deletion.
-This is because the time it takes to spin up & delete the RDS Aurora MySQL databases.
+### Time Estimates
 
-## Setup
+The job typically takes around 15 minutes for both creation and deletion. This is primarily due to the time required to spin up and delete the RDS Aurora MySQL databases.
 
-There should be a file named `config.yml` that sits at the top level of this repository sitting next to the `README.md`. It should match the following, replaced with your values.
+### Job Execution
+
+- Only one hosted/tenant job can be run per S3 bucket.
+- If a Terraform state file exists in your S3 bucket, you must run the cleanup job before you can run another job.
+- To create more than one hosted/tenant setup simultaneously, provide different S3 bucket names for each. Please note each bucket's name for the cleanup process.
+
+### Cleanup
+
+To run the Hosted/Tenant Cleanup Jenkins Job, use the same configuration file you used to create the setup. The job needs to initialize the state file in the S3 bucket before executing the `terraform destroy` command.
+
+## Config File Setup
+
+A `config.yml` file should be present at the root of the repository, alongside this `README.md`. If running locally, ensure it matches the following template, replacing placeholders with your actual values. If running in Jenkins, paste this YAML into the job.
 
 ```yml
 s3:
@@ -55,20 +63,17 @@ tf_vars:
 upgrade:
   version: 2.7.5-rc5
   image_tag: v2.7.5-rc5
-
 ```
 
-## Run Locally
+## Local Execution
 
-In `/terratest/test/host_test.go` run the function `TestCreateHostedTenantRancher`.
-This will create a hosted rancher and tenant rancher that is imported within it.
-It takes about `~15 minutes` because Terraform/AWS is slow with setting up the two RDS Aurora MySQL databases.
+To run the process locally, execute the `TestCreateHostedTenantRancher` function in `/terratest/test/host_test.go`. This action creates a hosted Rancher and an imported tenant Rancher. Due to the nature of Terraform/AWS, expect this to take around 15 minutes, mostly spent on setting up the two RDS Aurora MySQL databases.
 
-Once finished, you'll get the output of the host and tenant Rancher URLs
+Upon completion, the system will output the URLs for the host and tenant Ranchers.
 
-## Upgrade Locally
+## Local Upgrade
 
-You can run the following in `/terratest/test/host_test.go` to upgrade
+To upgrade locally, run the following functions in `/terratest/test/host_test.go`:
 
 - `TestUpgradeHostRancher`
 - `TestUpgradeTenantRancher`
