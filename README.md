@@ -1,21 +1,5 @@
 # Hosted / Tenant Rancher
 
-## Jenkins
-
-Currently able
-to run from Jenkins
-when using a Multi-line String Parameter
-named `CONFIG` and pasting in your version of the `config.yml` file shown below.
-You'll need to provide an existing s3 bucket name in your config
-when running from Jenkins. This will hold your terraform state file so that you can run cleanup from Jenkins.
-
-## Jenkins Cleanup
-
-Can now run cleanup from Jenkins!
-You need an existing s3 bucket when creating / destroying from Jenkins.
-However, once you have this bucket, you can always use it,
-as the cleanup script also cleans up the terraform state file from s3.
-
 ## Setup
 
 There should be a file named `config.yml` that sits at the top level of this repository sitting next to the `README.md`. It should match the following, replaced with your values.
@@ -56,7 +40,7 @@ upgrade:
 
 ```
 
-## Run
+## Run Locally
 
 In `/terratest/test/host_test.go` run the function `TestCreateHostedTenantRancher`.
 This will create a hosted rancher and tenant rancher that is imported within it.
@@ -64,18 +48,9 @@ It takes about `~15 minutes` because Terraform/AWS is slow with setting up the t
 
 Once finished, you'll get the output of the host and tenant Rancher URLs
 
-## Upgrade
+## Upgrade Locally
 
 You can run the following in `/terratest/test/host_test.go` to upgrade
 
 - `TestUpgradeHostRancher`
 - `TestUpgradeTenantRancher`
-
-## Temporary Note
-
-This repository includes a temporary workaround
-using https://github.com/go-rod/rod
-because two issues were discovered with Rancher's API / Rancher's Terraform provider while setting this up.
-
-- `github.com/rancher/rancher/issues/39779`
-- `github.com/rancher/terraform-provider-rancher2/issues/1042`

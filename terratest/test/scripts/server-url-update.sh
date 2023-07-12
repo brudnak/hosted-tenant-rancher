@@ -9,4 +9,4 @@ RANCHER_TOKEN=${RANCHER_TOKEN}
 curl -s -k -X PUT "https://${SERVER_URL}/v3/settings/server-url" \
   -H "Authorization: Bearer ${RANCHER_TOKEN}" \
   -H 'Content-Type: application/json' \
-  --data-binary "{\"name\": \"server-url\", \"value\":\"${SERVER_URL}\"}"
+  --data-binary "{\"name\": \"server-url\", \"value\":\"https://${SERVER_URL}\"}"

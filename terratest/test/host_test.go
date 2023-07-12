@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
 
 	toolkit "github.com/brudnak/hosted-tenant-rancher/tools"
 	"github.com/spf13/viper"
@@ -138,6 +139,7 @@ func TestSetupImport(t *testing.T) {
 	if err != nil {
 		log.Println("error calling bash script", err)
 	}
+	time.Sleep(5 * time.Second)
 	tools.SetupImport(hostUrl, password, configIp)
 
 	err = os.Setenv("KUBECONFIG", "theconfig.yml")
