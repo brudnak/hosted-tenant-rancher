@@ -1,5 +1,23 @@
 # Hosted / Tenant Rancher
 
+## Running in Jenkins
+
+##### Prerequisites
+
+You'll need to create a s3 bucket in AWS us-east-2 specifically for this Jenkins job to use.
+It will store the Terraform state file.
+Naming it something like "<your-initials>-hosted-tenant-tf", and putting that name in the configuration file below.
+You'll only be able to create 1 hosted/tenant setup at a time.
+If you try running it again, there is a check for an existing state file and it will fail.
+So before running the job again,
+you'll need to run the Jenkins cleanup job which will run a `terrafor destroy` on the infrastructure,
+and also cleanup the state file in the s3 bucket.
+
+##### Estimated Time
+
+The job takes about `~15 minutes` to run for either creation and deletion.
+This is because the time it takes to spin up & delete the RDS Aurora MySQL databases.
+
 ## Setup
 
 There should be a file named `config.yml` that sits at the top level of this repository sitting next to the `README.md`. It should match the following, replaced with your values.
