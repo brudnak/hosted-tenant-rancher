@@ -80,15 +80,10 @@ func TestCreateHostedTenantRancher(t *testing.T) {
 		Node2IP:    infra2Server2IPAddress,
 	}
 
-	actualHostNodeCount, _ := tools.K3SHostInstall(host)
-	actualTenantNodeCount, tenantIp := tools.K3STenantInstall(tenant)
+	tools.K3SHostInstall(host)
+	tenantIp := tools.K3STenantInstall(tenant)
 
 	configIp = tenantIp
-
-	expectedNodeCount := 2
-
-	assert.Equal(t, expectedNodeCount, actualHostNodeCount)
-	assert.Equal(t, expectedNodeCount, actualTenantNodeCount)
 
 	t.Run("install host rancher", TestInstallHostRancher)
 

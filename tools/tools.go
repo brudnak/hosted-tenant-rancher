@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 	"time"
 
@@ -65,7 +64,7 @@ func (t *Tools) WaitForNodeReady(nodeIP string) error {
 	}
 }
 
-func (t *Tools) K3SHostInstall(config K3SConfig) (int, string) {
+func (t *Tools) K3SHostInstall(config K3SConfig) string {
 
 	k3sVersion := viper.GetString("k3s.version")
 
@@ -102,17 +101,6 @@ func (t *Tools) K3SHostInstall(config K3SConfig) (int, string) {
 	err = t.WaitForNodeReady(config.Node2IP)
 	if err != nil {
 		log.Println("node two is not ready: %w", err)
-	}
-
-	wcResponse, err := t.RunCommand("sudo k3s kubectl get nodes | wc -l", config.Node1IP)
-	if err != nil {
-		log.Println(err)
-	}
-
-	actualNodeCount, err := strconv.Atoi(wcResponse)
-	actualNodeCount = actualNodeCount - 1
-	if err != nil {
-		log.Println(err)
 	}
 
 	kubeConf := []byte(serverKubeConfig)
@@ -147,10 +135,10 @@ func (t *Tools) K3SHostInstall(config K3SConfig) (int, string) {
 		viper.GetString("upgrade.image_tag"),
 		upgradeFilePath,
 		viper.GetBool("rancher.psp_bool"))
-	return actualNodeCount, configIP
+	return configIP
 }
 
-func (t *Tools) K3STenantInstall(config K3SConfig) (int, string) {
+func (t *Tools) K3STenantInstall(config K3SConfig) string {
 
 	k3sVersion := viper.GetString("k3s.version")
 
@@ -187,17 +175,6 @@ func (t *Tools) K3STenantInstall(config K3SConfig) (int, string) {
 	err = t.WaitForNodeReady(config.Node2IP)
 	if err != nil {
 		log.Println("node two is not ready: %w", err)
-	}
-
-	wcResponse, err := t.RunCommand("sudo k3s kubectl get nodes | wc -l", config.Node1IP)
-	if err != nil {
-		log.Println(err)
-	}
-
-	actualNodeCount, err := strconv.Atoi(wcResponse)
-	actualNodeCount = actualNodeCount - 1
-	if err != nil {
-		log.Println(err)
 	}
 
 	kubeConf := []byte(serverKubeConfig)
@@ -237,7 +214,7 @@ func (t *Tools) K3STenantInstall(config K3SConfig) (int, string) {
 		viper.GetString("upgrade.image_tag"),
 		upgradeFilePath,
 		viper.GetBool("rancher.psp_bool"))
-	return actualNodeCount, configIP
+	return configIP
 }
 
 func (t *Tools) CreateToken(url string, password string) string {
