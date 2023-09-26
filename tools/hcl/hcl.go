@@ -28,7 +28,7 @@ func GenerateKubectlTfVar(configIp string, manifestUrl string) {
 	}
 }
 
-func RancherHelm(url, password, rancherVersion, imageTag, filePath string, pspBool bool) {
+func RancherHelm(url, repositoryUrl, password, rancherVersion, imageTag, filePath string, pspBool bool) {
 	f := hclwrite.NewEmptyFile()
 
 	tfVarsFile, err := os.Create(filePath)
@@ -40,6 +40,7 @@ func RancherHelm(url, password, rancherVersion, imageTag, filePath string, pspBo
 	rootBody := f.Body()
 
 	rootBody.SetAttributeValue("rancher_url", cty.StringVal(url))
+	rootBody.SetAttributeValue("repository_url", cty.StringVal(repositoryUrl))
 	rootBody.SetAttributeValue("bootstrap_password", cty.StringVal(password))
 	rootBody.SetAttributeValue("rancher_version", cty.StringVal(rancherVersion))
 	rootBody.SetAttributeValue("image_tag", cty.StringVal(imageTag))

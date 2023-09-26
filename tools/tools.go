@@ -129,6 +129,7 @@ func (t *Tools) K3SHostInstall(config K3SConfig) (int, string) {
 	initialFilePath := "../modules/helm/host/terraform.tfvars"
 	hcl.RancherHelm(
 		config.RancherURL,
+		viper.GetString("rancher.repository_url"),
 		viper.GetString("rancher.bootstrap_password"),
 		viper.GetString("rancher.version"),
 		viper.GetString("rancher.image_tag"),
@@ -140,6 +141,7 @@ func (t *Tools) K3SHostInstall(config K3SConfig) (int, string) {
 	upgradeFilePath := "../modules/helm/host/upgrade.tfvars"
 	hcl.RancherHelm(
 		config.RancherURL,
+		viper.GetString("rancher.repository_url"),
 		viper.GetString("rancher.bootstrap_password"),
 		viper.GetString("upgrade.version"),
 		viper.GetString("upgrade.image_tag"),
@@ -217,6 +219,7 @@ func (t *Tools) K3STenantInstall(config K3SConfig) (int, string) {
 	initialFilePath := "../modules/helm/tenant/terraform.tfvars"
 	hcl.RancherHelm(
 		config.RancherURL,
+		viper.GetString("rancher.repository_url"),
 		viper.GetString("rancher.bootstrap_password"),
 		viper.GetString("rancher.version"),
 		viper.GetString("rancher.image_tag"),
@@ -228,6 +231,7 @@ func (t *Tools) K3STenantInstall(config K3SConfig) (int, string) {
 	upgradeFilePath := "../modules/helm/tenant/upgrade.tfvars"
 	hcl.RancherHelm(
 		config.RancherURL,
+		viper.GetString("rancher.repository_url"),
 		viper.GetString("rancher.bootstrap_password"),
 		viper.GetString("upgrade.version"),
 		viper.GetString("upgrade.image_tag"),

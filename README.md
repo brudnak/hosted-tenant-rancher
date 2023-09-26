@@ -40,6 +40,10 @@ aws:
     YOUR-PRIVATE-KEY-HERE
     -----END RSA PRIVATE KEY-----
 rancher:
+  repository_url: https://releases.rancher.com/server-charts/latest 
+  # OR repository_url: https://releases.rancher.com/server-charts/alpha
+  # OR repository_url: https://releases.rancher.com/server-charts/stable
+  # SEE https://ranchermanager.docs.rancher.com/getting-started/installation-and-upgrade/resources/choose-a-rancher-version#helm-chart-repositories
   bootstrap_password: whatever-rancher-bootstrap-password-you-want
   version: 2.7.5
   image_tag: v2.7.5

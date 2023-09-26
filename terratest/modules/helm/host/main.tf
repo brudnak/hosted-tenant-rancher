@@ -15,7 +15,7 @@ provider "helm" {
 
 resource "helm_release" "rancher" {
   name             = "rancher"
-  repository       = "https://releases.rancher.com/server-charts/latest"
+  repository       = var.repository_url
   chart            = "rancher"
   version          = var.rancher_version
   create_namespace = "true"
