@@ -30,6 +30,10 @@ To run the Hosted/Tenant Cleanup Jenkins Job, use the same configuration file yo
 
 A `config.yml` file should be present at the root of the repository, alongside this `README.md`. If running locally, ensure it matches the following template, replacing placeholders with your actual values. If running in Jenkins, paste this YAML into the job.
 
+You can test with latest, alpha or stable. Just change the rancher.repository_url to what you need. 
+
+More details about repository_url here: https://ranchermanager.docs.rancher.com/getting-started/installation-and-upgrade/resources/choose-a-rancher-version#helm-chart-repositories
+
 ```yml
 s3:
   bucket: name-of-your-s3-bucket-that-you-already-have-created
@@ -41,9 +45,6 @@ aws:
     -----END RSA PRIVATE KEY-----
 rancher:
   repository_url: https://releases.rancher.com/server-charts/latest 
-  # OR repository_url: https://releases.rancher.com/server-charts/alpha
-  # OR repository_url: https://releases.rancher.com/server-charts/stable
-  # SEE https://ranchermanager.docs.rancher.com/getting-started/installation-and-upgrade/resources/choose-a-rancher-version#helm-chart-repositories
   bootstrap_password: whatever-rancher-bootstrap-password-you-want
   version: 2.7.5
   image_tag: v2.7.5
