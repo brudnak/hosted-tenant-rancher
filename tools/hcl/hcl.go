@@ -68,7 +68,8 @@ func GenAwsVar(
 	securityGroupId,
 	pemKeyName,
 	awsRdsPassword,
-	route53Fqdn string) {
+	route53Fqdn,
+	instanceTypeSize string) {
 
 	f := hclwrite.NewEmptyFile()
 
@@ -93,6 +94,7 @@ func GenAwsVar(
 	rootBody.SetAttributeValue("aws_pem_key_name", cty.StringVal(pemKeyName))
 	rootBody.SetAttributeValue("aws_rds_password", cty.StringVal(awsRdsPassword))
 	rootBody.SetAttributeValue("aws_route53_fqdn", cty.StringVal(route53Fqdn))
+	rootBody.SetAttributeValue("aws_ec2_instance_type", cty.StringVal(instanceTypeSize))
 
 	_, err = tfVarsFile.Write(f.Bytes())
 	if err != nil {

@@ -68,3 +68,8 @@ variable "aws_rds_password" {
   type        = string
   description = "Password for the Amazon Aurora MySQL database."
 }
+
+variable "aws_ec2_instance_type" {
+  type        = string
+  description = "AWS EC2 instance type to use."
+}

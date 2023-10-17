@@ -24,6 +24,7 @@ module "high-availability-infrastructure-1" {
   aws_pem_key_name      = var.aws_pem_key_name
   aws_rds_password      = var.aws_rds_password
   aws_route53_fqdn      = var.aws_route53_fqdn
+  aws_ec2_instance_type = var.aws_ec2_instance_type
 }
 
 module "high-availability-infrastructure-2" {
@@ -41,4 +42,5 @@ module "high-availability-infrastructure-2" {
   aws_pem_key_name      = var.aws_pem_key_name
   aws_rds_password      = var.aws_rds_password
   aws_route53_fqdn      = var.aws_route53_fqdn
+  aws_ec2_instance_type = var.aws_ec2_instance_type
 }

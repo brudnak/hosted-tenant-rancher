@@ -65,6 +65,7 @@ tf_vars:
   aws_pem_key_name: the-name-of-your-pem-key-in-aws-no-file-extension
   aws_rds_password: password-you-want-for-aws-rds-database-suggest-googling-for-requirements
   aws_route53_fqdn: something.something.something
+  aws_ec2_instance_type: m5.xlarge # or whatever you want
 upgrade:
   version: 2.7.5-rc5
   image_tag: v2.7.5-rc5

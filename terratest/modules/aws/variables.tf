@@ -68,3 +68,8 @@ variable "aws_route53_fqdn" {
   type        = string
   description = "The fully qualified domain name to use."
 }
+
+variable "aws_ec2_instance_type" {
+  type        = string
+  description = "AWS EC2 instance type to use."
+}
