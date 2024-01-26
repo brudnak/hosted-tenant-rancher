@@ -2,6 +2,7 @@
 
 This guide walks you through running and managing a Hosted/Tenant Rancher using Jenkins.
 
+
 ## Running in Jenkins
 
 ### Prerequisites
@@ -33,10 +34,6 @@ A `config.yml` file should be present at the root of the repository, alongside t
 You can test with latest, alpha or stable. Just change the rancher.repository_url to what you need. 
 
 More details about repository_url here: https://ranchermanager.docs.rancher.com/getting-started/installation-and-upgrade/resources/choose-a-rancher-version#helm-chart-repositories
-
-#### Rancher Prime
-
-Added a new yml value `image`. If you want to use Rancher Prime, you need to set the image to `registry.rancher.com/rancher/rancher-prime`. Otherwise, set it as "rancher/rancher".
 
 ```yml
 s3:
@@ -75,6 +72,26 @@ upgrade:
   version: 2.7.5-rc5
   image: registry.rancher.com/rancher/rancher # or rancher/rancher
   image_tag: v2.7.5-rc5
+```
+
+## Rancher Prime
+
+Added a new yml value `image`. If you want to use Rancher Prime, you need to set the image to `registry.rancher.com/rancher/rancher-prime`. Otherwise, set it as "rancher/rancher".
+
+For Rancher Prime the `repository_url` should be `https://releases.rancher.com/prime-charts/latest`
+
+`image_tag` & `version` can be set as empty strings in the yml if you just want `latest`.
+
+```yml
+# OTHER YML CONTINUED ABOVE (THIS IS JUST A SAMPLE SNIPPET)
+rancher:
+  repository_url: https://charts.rancher.com/server-charts/prime
+  bootstrap_password: your-password-goes-here
+  version: ""
+  image: registry.rancher.com/rancher/rancher
+  image_tag: ""
+  psp_bool: true
+# OTHER YML CONTINUED BELOW (THIS IS JUST A SAMPLE SNIPPET)
 ```
 
 ## Local Execution
