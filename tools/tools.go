@@ -120,6 +120,7 @@ func (t *Tools) K3SHostInstall(config K3SConfig) string {
 		viper.GetString("rancher.repository_url"),
 		viper.GetString("rancher.bootstrap_password"),
 		viper.GetString("rancher.version"),
+		viper.GetString("rancher.image"),
 		viper.GetString("rancher.image_tag"),
 		initialFilePath,
 		viper.GetBool("rancher.psp_bool"),
@@ -132,6 +133,7 @@ func (t *Tools) K3SHostInstall(config K3SConfig) string {
 		viper.GetString("rancher.repository_url"),
 		viper.GetString("rancher.bootstrap_password"),
 		viper.GetString("upgrade.version"),
+		viper.GetString("upgrade.image"),
 		viper.GetString("upgrade.image_tag"),
 		upgradeFilePath,
 		viper.GetBool("rancher.psp_bool"))
@@ -199,6 +201,7 @@ func (t *Tools) K3STenantInstall(config K3SConfig) string {
 		viper.GetString("rancher.repository_url"),
 		viper.GetString("rancher.bootstrap_password"),
 		viper.GetString("rancher.version"),
+		viper.GetString("rancher.image"),
 		viper.GetString("rancher.image_tag"),
 		initialFilePath,
 		viper.GetBool("rancher.psp_bool"),
@@ -211,6 +214,7 @@ func (t *Tools) K3STenantInstall(config K3SConfig) string {
 		viper.GetString("rancher.repository_url"),
 		viper.GetString("rancher.bootstrap_password"),
 		viper.GetString("upgrade.version"),
+		viper.GetString("upgrade.image"),
 		viper.GetString("upgrade.image_tag"),
 		upgradeFilePath,
 		viper.GetBool("rancher.psp_bool"))

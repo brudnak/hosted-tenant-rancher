@@ -32,6 +32,11 @@ resource "helm_release" "rancher" {
   }
 
   set {
+    name  = "rancherImage"
+    value = var.rancher_image
+  }
+
+  set {
     name  = "rancherImageTag"
     value = var.image_tag
   }

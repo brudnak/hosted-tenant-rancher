@@ -34,6 +34,10 @@ You can test with latest, alpha or stable. Just change the rancher.repository_ur
 
 More details about repository_url here: https://ranchermanager.docs.rancher.com/getting-started/installation-and-upgrade/resources/choose-a-rancher-version#helm-chart-repositories
 
+#### Rancher Prime
+
+Added a new yml value `image`. If you want to use Rancher Prime, you need to set the image to `registry.rancher.com/rancher/rancher-prime`. Otherwise, set it as "rancher/rancher".
+
 ```yml
 s3:
   bucket: name-of-your-s3-bucket-that-you-already-have-created
@@ -47,6 +51,7 @@ rancher:
   repository_url: https://releases.rancher.com/server-charts/latest 
   bootstrap_password: whatever-rancher-bootstrap-password-you-want
   version: 2.7.5
+  image: registry.rancher.com/rancher/rancher # or rancher/rancher
   image_tag: v2.7.5
   psp_bool: false
 k3s:
@@ -68,6 +73,7 @@ tf_vars:
   aws_ec2_instance_type: m5.xlarge # or whatever you want
 upgrade:
   version: 2.7.5-rc5
+  image: registry.rancher.com/rancher/rancher # or rancher/rancher
   image_tag: v2.7.5-rc5
 ```
 

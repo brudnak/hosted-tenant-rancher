@@ -236,6 +236,15 @@ func TestHostCleanup(t *testing.T) {
 
 	cleanupFiles(filepaths...)
 	cleanupFolders(folderpaths...)
+	viper.AddConfigPath("../../")
+	viper.SetConfigName("config")
+	viper.SetConfigType("yml")
+	err := viper.ReadInConfig()
+
+	if err != nil {
+		log.Println("error reading config:", err)
+	}
+	defer deleteS3Object(viper.GetString("s3.bucket"), "terraform.tfstate")
 }
 
 func cleanupFiles(paths ...string) {
