@@ -35,28 +35,37 @@ You can test with latest, alpha or stable. Just change the rancher.repository_ur
 
 More details about repository_url here: https://ranchermanager.docs.rancher.com/getting-started/installation-and-upgrade/resources/choose-a-rancher-version#helm-chart-repositories
 
+## RDS Password
+
+When setting the `aws_rds_password` value in yaml. It needs to adhere to this requirement by AWS:
+
+At least 8 printable ASCII characters. Can't contain any of the following: / (slash), '(single quote), "(double quote) and @ (at sign).
+
+If it doesn't adhere to this, the provisioning of the MySQL Database will fail in Terraform.
+
 ```yml
 s3:
-  bucket: name-of-your-s3-bucket-that-you-already-have-created
+  bucket: # The name of your S3 Bucket in AWS us-east-2 goes here.
   region: us-east-2
 aws:
-  rsa_private_key: |
+  # RSA Private Key is the contents of your AWS pem key file.
+  rsa_private_key: | 
     -----BEGIN RSA PRIVATE KEY-----
-    YOUR-PRIVATE-KEY-HERE
+    <<<THE CONTENTS OF YOUR AWS PEM KEY GO HERE>>>
     -----END RSA PRIVATE KEY-----
 rancher:
   repository_url: https://releases.rancher.com/server-charts/latest 
-  bootstrap_password: whatever-rancher-bootstrap-password-you-want
-  version: 2.7.5
-  image: registry.rancher.com/rancher/rancher # or rancher/rancher
-  image_tag: v2.7.5
-  psp_bool: false
+  bootstrap_password: # Whatever bootstrap password you want for Rancher goes here.
+  version: 2.8.1
+  image: rancher/rancher
+  image_tag: v2.8-head
+  psp_bool: true
 k3s:
-  version: v1.25.10+k3s1
+  version: v1.27.8+k3s2 # 2.6 v1.23.6+k3s1 / 2.7 v1.25.10+k3s1 / 2.8 v1.27.8+k3s2
 tf_vars:
-  aws_access_key: your-aws-access-key
-  aws_secret_key: your-aws-secret-key
-  aws_prefix: a-prefix-for-naming-things-must-be-no-more-than-3-characters
+  aws_access_key: # Your AWS Access Key
+  aws_secret_key: # Your AWS Secret Key
+  aws_prefix: # Short prefix for labeling things, should only be 2 or 3 characters, your initials.
   aws_vpc: aws-vpc-you-want-to-use
   aws_subnet_a: subnet-a-id
   aws_subnet_b: subnet-b-id
@@ -65,13 +74,13 @@ tf_vars:
   aws_subnet_id: the-subnet-id
   aws_security_group_id: what-security-group-you-want-to-use
   aws_pem_key_name: the-name-of-your-pem-key-in-aws-no-file-extension
-  aws_rds_password: password-you-want-for-aws-rds-database-suggest-googling-for-requirements
+  aws_rds_password: # At least 8 printable ASCII characters. Can't contain any of the following: / (slash), '(single quote), "(double quote) and @ (at sign).
   aws_route53_fqdn: something.something.something
-  aws_ec2_instance_type: m5.xlarge # or whatever you want
+  aws_ec2_instance_type: m5.xlarge
 upgrade:
-  version: 2.7.5-rc5
-  image: registry.rancher.com/rancher/rancher # or rancher/rancher
-  image_tag: v2.7.5-rc5
+  version: ""
+  image: rancher/rancher
+  image_tag: v2.8-head
 ```
 
 ## Rancher Prime
@@ -85,7 +94,7 @@ For Rancher Prime the `repository_url` should be `https://releases.rancher.com/p
 ```yml
 # OTHER YML CONTINUED ABOVE (THIS IS JUST A SAMPLE SNIPPET)
 rancher:
-  repository_url: https://charts.rancher.com/server-charts/prime
+  repository_url: https://releases.rancher.com/prime-charts/latest
   bootstrap_password: your-password-goes-here
   version: ""
   image: registry.rancher.com/rancher/rancher
