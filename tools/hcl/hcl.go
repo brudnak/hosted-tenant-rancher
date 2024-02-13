@@ -28,7 +28,7 @@ func GenerateKubectlTfVar(configIp string, manifestUrl string) {
 	}
 }
 
-func RancherHelm(url, repositoryUrl, password, rancherVersion, rancherImage, imageTag, filePath string, pspBool bool) {
+func RancherHelm(url, repositoryUrl, password, rancherVersion, rancherImage, imageTag, filePath string, pspBool bool, extraEnvOneName, extraEnvOneValue string) {
 	f := hclwrite.NewEmptyFile()
 
 	tfVarsFile, err := os.Create(filePath)
@@ -46,7 +46,12 @@ func RancherHelm(url, repositoryUrl, password, rancherVersion, rancherImage, ima
 	rootBody.SetAttributeValue("rancher_image", cty.StringVal(rancherImage))
 	rootBody.SetAttributeValue("image_tag", cty.StringVal(imageTag))
 	if pspBool == false {
-		rootBody.SetAttributeValue("psp_bool", cty.BoolVal(pspBool))
+		rootBody.SetAttributeValue("psp_enabled", cty.BoolVal(pspBool))
+	}
+
+	if extraEnvOneName != "" && extraEnvOneValue != "" {
+		rootBody.SetAttributeValue("extra_env_name", cty.StringVal(extraEnvOneName))
+		rootBody.SetAttributeValue("extra_env_value", cty.StringVal(extraEnvOneValue))
 	}
 
 	_, err = tfVarsFile.Write(f.Bytes())

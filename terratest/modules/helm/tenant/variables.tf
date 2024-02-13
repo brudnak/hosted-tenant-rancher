@@ -10,6 +10,18 @@ variable "rancher_image" {
 variable "image_tag" {
   default = ""
 }
-variable "psp_bool" {
+variable "psp_enabled" {
   default = false
+}
+
+variable "extra_env_name" {
+  description = "Name of the first extra environment variable"
+  type        = string
+  default     = null
+}
+
+variable "extra_env_value" {
+  description = "Value of the first extra environment variable"
+  type        = string
+  default     = null
 }

@@ -123,8 +123,9 @@ func (t *Tools) K3SHostInstall(config K3SConfig) string {
 		viper.GetString("rancher.image"),
 		viper.GetString("rancher.image_tag"),
 		initialFilePath,
-		viper.GetBool("rancher.psp_bool"),
-	)
+		viper.GetBool("rancher.psp_enabled"),
+		viper.GetString("rancher.extra_env_name"),
+		viper.GetString("rancher.extra_env_value"))
 
 	// Upgrade terraform variable file
 	upgradeFilePath := "../modules/helm/host/upgrade.tfvars"
@@ -136,7 +137,9 @@ func (t *Tools) K3SHostInstall(config K3SConfig) string {
 		viper.GetString("upgrade.image"),
 		viper.GetString("upgrade.image_tag"),
 		upgradeFilePath,
-		viper.GetBool("rancher.psp_bool"))
+		viper.GetBool("rancher.psp_enabled"),
+		viper.GetString("upgrade.extra_env_name"),
+		viper.GetString("upgrade.extra_env_value"))
 	return configIP
 }
 
@@ -204,8 +207,9 @@ func (t *Tools) K3STenantInstall(config K3SConfig) string {
 		viper.GetString("rancher.image"),
 		viper.GetString("rancher.image_tag"),
 		initialFilePath,
-		viper.GetBool("rancher.psp_bool"),
-	)
+		viper.GetBool("rancher.psp_enabled"),
+		viper.GetString("rancher.extra_env_name"),
+		viper.GetString("rancher.extra_env_value"))
 
 	// Upgrade terraform variable file
 	upgradeFilePath := "../modules/helm/tenant/upgrade.tfvars"
@@ -217,7 +221,9 @@ func (t *Tools) K3STenantInstall(config K3SConfig) string {
 		viper.GetString("upgrade.image"),
 		viper.GetString("upgrade.image_tag"),
 		upgradeFilePath,
-		viper.GetBool("rancher.psp_bool"))
+		viper.GetBool("rancher.psp_enabled"),
+		viper.GetString("upgrade.extra_env_name"),
+		viper.GetString("upgrade.extra_env_value"))
 	return configIP
 }
 

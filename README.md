@@ -59,7 +59,9 @@ rancher:
   version: 2.8.1
   image: rancher/rancher
   image_tag: v2.8-head
-  psp_bool: true
+  psp_enabled: false
+  extra_env_name: "" # can be left empty
+  extra_env_value: "" # can be left empty
 k3s:
   version: v1.27.8+k3s2 # 2.6 v1.23.6+k3s1 / 2.7 v1.25.10+k3s1 / 2.8 v1.27.8+k3s2
 tf_vars:
@@ -81,6 +83,8 @@ upgrade:
   version: ""
   image: rancher/rancher
   image_tag: v2.8-head
+  extra_env_name: "" # can be left empty
+  extra_env_value: "" # can be left empty
 ```
 
 ## Rancher Prime
@@ -99,7 +103,9 @@ rancher:
   version: ""
   image: registry.rancher.com/rancher/rancher
   image_tag: ""
-  psp_bool: true
+  psp_enabled: false
+  extra_env_name: "" # can be left empty
+  extra_env_value: "" # can be left empty
 # OTHER YML CONTINUED BELOW (THIS IS JUST A SAMPLE SNIPPET)
 ```
 

@@ -28,7 +28,7 @@ resource "helm_release" "rancher" {
 
   set {
     name  = "global.cattle.psp.enabled"
-    value = var.psp_bool
+    value = var.psp_enabled
   }
 
   set {
@@ -49,5 +49,16 @@ resource "helm_release" "rancher" {
   set {
     name  = "tls"
     value = "external"
+  }
+
+  # Dynamically set the extra environment variable using variables
+  set {
+    name  = "extraEnv[0].name"
+    value = var.extra_env_name
+  }
+
+  set {
+    name  = "extraEnv[0].value"
+    value = var.extra_env_value
   }
 }
