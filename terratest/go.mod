@@ -1,6 +1,6 @@
 module github.com/brudnak/hosted-tenant-rancher/terratest
 
-go 1.19
+go 1.22
 
 require (
 	github.com/brudnak/hosted-tenant-rancher/tools v0.0.0-20230623190010-d4632af30d9b

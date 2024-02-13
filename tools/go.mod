@@ -1,6 +1,6 @@
 module github.com/brudnak/hosted-tenant-rancher/tools
 
-go 1.19
+go 1.22
 
 require (
 	github.com/hashicorp/hcl/v2 v2.17.0
