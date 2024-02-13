@@ -1,5 +1,5 @@
 # Start from the latest golang base image
-FROM golang:1.19
+FROM golang:1.22
 
 USER root
 RUN mkdir -p /.cache && chmod -R 777 /.cache
