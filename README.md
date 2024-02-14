@@ -1,101 +1,86 @@
-# Hosted/Tenant Rancher
+# Hosted/Tenant Rancher Guide
 
-This guide walks you through running and managing a Hosted/Tenant Rancher using Jenkins.
-
+This README provides instructions for running and managing Hosted/Tenant Rancher instances through Jenkins, including setup, execution, cleanup, and local testing.
 
 ## Running in Jenkins
 
 ### Prerequisites
 
-1. An existing S3 bucket dedicated to this task.
-    - You only need to create this once and can reuse it for all future runs.
-    - A Jenkins cleanup job will delete the Terraform state file in the S3 bucket.
-
-2. A completed configuration file (see the Config File Setup section). Copy and paste the YAML into the Jenkins job.
+- **S3 Bucket**: Ensure you have an S3 bucket exclusively for this purpose. It's a one-time setup, reusable for future runs. A Jenkins cleanup job will handle the Terraform state file deletion in this bucket.
+- **Configuration File**: Prepare a `config.yml` file as per the Config File Setup section below. This file is necessary for Jenkins job configuration.
 
 ### Time Estimates
 
-The job typically takes around 15 minutes for both creation and deletion. This is primarily due to the time required to spin up and delete the RDS Aurora MySQL databases.
+Expect the Jenkins job to take approximately 15 minutes, attributed mainly to the provisioning and deletion of RDS Aurora MySQL databases.
 
-### Job Execution
+### Job Execution Guidelines
 
-- Only one hosted/tenant job can be run per S3 bucket.
-- If a Terraform state file exists in your S3 bucket, you must run the cleanup job before you can run another job.
-- To create more than one hosted/tenant setup simultaneously, provide different S3 bucket names for each. Please note each bucket's name for the cleanup process.
+- **S3 Bucket Limitation**: Each S3 bucket can only be associated with one hosted/tenant job at a time.
+- **Terraform State File**: Presence of a Terraform state file in the S3 bucket necessitates running a cleanup job before initiating a new one.
+- **Multiple Instances**: For simultaneous hosted/tenant setups, use unique S3 bucket names for each and note them for subsequent cleanup.
 
-### Cleanup
+### Cleanup Process
 
-To run the Hosted/Tenant Cleanup Jenkins Job, use the same configuration file you used to create the setup. The job needs to initialize the state file in the S3 bucket before executing the `terraform destroy` command.
+Utilize the same `config.yml` for the Hosted/Tenant Cleanup Jenkins Job. This job initializes the state file in the S3 bucket to facilitate the `terraform destroy` command.
 
 ## Config File Setup
 
-A `config.yml` file should be present at the root of the repository, alongside this `README.md`. If running locally, ensure it matches the following template, replacing placeholders with your actual values. If running in Jenkins, paste this YAML into the job.
+The `config.yml` file is crucial for both local and Jenkins executions. Ensure it's present at the repository's root, alongside this README. The following template outlines the necessary configuration, where placeholders should be replaced with your specific details. For Jenkins execution, copy and paste the provided YAML into the job setup.
 
-You can test with latest, alpha or stable. Just change the rancher.repository_url to what you need. 
+**Repository URL**: The `rancher.repository_url` can be adjusted to use the latest, alpha, or stable versions. Detailed information about choosing a Rancher version is available at the official Rancher documentation.
 
-More details about repository_url here: https://ranchermanager.docs.rancher.com/getting-started/installation-and-upgrade/resources/choose-a-rancher-version#helm-chart-repositories
+### AWS RDS Password Requirements
 
-## RDS Password
+The `aws_rds_password` in the YAML file must comply with AWS's criteria: a minimum of 8 printable ASCII characters, excluding /, ', ", and @ symbols. Non-compliance will result in Terraform provisioning failure.
 
-When setting the `aws_rds_password` value in yaml. It needs to adhere to this requirement by AWS:
-
-At least 8 printable ASCII characters. Can't contain any of the following: / (slash), '(single quote), "(double quote) and @ (at sign).
-
-If it doesn't adhere to this, the provisioning of the MySQL Database will fail in Terraform.
-
-```yml
+```yaml
 s3:
-  bucket: # The name of your S3 Bucket in AWS us-east-2 goes here.
+  bucket: # Your dedicated S3 Bucket name in AWS us-east-2.
   region: us-east-2
 aws:
-  # RSA Private Key is the contents of your AWS pem key file.
   rsa_private_key: | 
     -----BEGIN RSA PRIVATE KEY-----
-    <<<THE CONTENTS OF YOUR AWS PEM KEY GO HERE>>>
+    # Your AWS PEM key contents here.
     -----END RSA PRIVATE KEY-----
 rancher:
-  repository_url: https://releases.rancher.com/server-charts/latest 
-  bootstrap_password: # Whatever bootstrap password you want for Rancher goes here.
-  version: 2.8.1 # can be an empty string
+  repository_url: https://releases.rancher.com/server-charts/latest
+  bootstrap_password: # Desired bootstrap password for Rancher.
+  version: 2.8.1
   image: rancher/rancher
-  image_tag: v2.8-head # can be an empty string
+  image_tag: v2.8-head
   psp_enabled: false
-  extra_env_name: "" # can be an empty string
-  extra_env_value: "" # can be an empty string
+  extra_env_name: ""
+  extra_env_value: ""
 k3s:
   version: v1.27.8+k3s2
 tf_vars:
-  aws_access_key: # Your AWS Access Key
-  aws_secret_key: # Your AWS Secret Key
-  aws_prefix: # Short prefix for labeling things, should only be 2 or 3 characters, your initials.
-  aws_vpc: aws-vpc-you-want-to-use
-  aws_subnet_a: subnet-a-id
-  aws_subnet_b: subnet-b-id
-  aws_subnet_c: subnet-c-id
-  aws_ami: the-ami-that-you-want-to-use
-  aws_subnet_id: the-subnet-id
-  aws_security_group_id: what-security-group-you-want-to-use
-  aws_pem_key_name: the-name-of-your-pem-key-in-aws-no-file-extension
-  aws_rds_password: # At least 8 printable ASCII characters. Can't contain any of the following: / (slash), '(single quote), "(double quote) and @ (at sign).
-  aws_route53_fqdn: something.something.something
+  aws_access_key: # Your AWS Access Key.
+  aws_secret_key: # Your AWS Secret Key.
+  aws_prefix: # A short prefix for labeling, preferably your initials.
+  aws_vpc: # The VPC ID to use.
+  aws_subnet_a: # Subnet A ID.
+  aws_subnet_b: # Subnet B ID.
+  aws_subnet_c: # Subnet C ID.
+  aws_ami: # The AMI to use.
+  aws_subnet_id: # The Subnet ID to use.
+  aws_security_group_id: # The Security Group ID to use.
+  aws_pem_key_name: # Your PEM key name in AWS (no file extension).
+  aws_rds_password: # AWS RDS password following the specified criteria.
+  aws_route53_fqdn: # Your Route53 FQDN.
   aws_ec2_instance_type: m5.xlarge
 upgrade:
-  version: "" # can be an empty string
+  version: ""
   image: rancher/rancher
-  image_tag: v2.8-head # can be an empty string
-  extra_env_name: "" # can be an empty string
-  extra_env_value: "" # can be an empty string
+  image_tag: v2.8-head
+  extra_env_name: ""
+  extra_env_value: ""
 ```
 
-## Local Execution
+### Local Execution and Upgrade
+For local testing and upgrade processes, specific functions in `/terratest/test/host_test.go` facilitate the creation and upgrade of hosted and tenant Ranchers. Expect similar time frames (~15 minutes) due to Terraform and AWS operations, primarily for RDS Aurora MySQL database setups.
 
-To run the process locally, execute the `TestCreateHostedTenantRancher` function in `/terratest/test/host_test.go`. This action creates a hosted Rancher and an imported tenant Rancher. Due to the nature of Terraform/AWS, expect this to take around 15 minutes, mostly spent on setting up the two RDS Aurora MySQL databases.
+- **Creation**: Execute `TestCreateHostedTenantRancher` to initiate a hosted Rancher and an imported tenant Rancher setup.
+- **Upgrade**: Run `TestUpgradeHostRancher` and `TestUpgradeTenantRancher` for upgrading existing setups.
 
-Upon completion, the system will output the URLs for the host and tenant Ranchers.
-
-## Local Upgrade
-
-To upgrade locally, run the following functions in `/terratest/test/host_test.go`:
-
-- `TestUpgradeHostRancher`
-- `TestUpgradeTenantRancher`
+Upon successful execution, URLs for both host and tenant Ranchers will be provided.
+sting and upgrade processes, specific functions in /terratest/test/host_test.go facilitate the creation and upgrade of hosted and tenant Ranchers. Expect similar time frames (~15 minutes) due to Terraform and AWS operations, primarily for RDS Aurora MySQL database setups.
