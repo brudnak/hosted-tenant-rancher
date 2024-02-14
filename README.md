@@ -56,14 +56,14 @@ aws:
 rancher:
   repository_url: https://releases.rancher.com/server-charts/latest 
   bootstrap_password: # Whatever bootstrap password you want for Rancher goes here.
-  version: 2.8.1
+  version: 2.8.1 # can be an empty string
   image: rancher/rancher
-  image_tag: v2.8-head
+  image_tag: v2.8-head # can be an empty string
   psp_enabled: false
-  extra_env_name: "" # can be left empty
-  extra_env_value: "" # can be left empty
+  extra_env_name: "" # can be an empty string
+  extra_env_value: "" # can be an empty string
 k3s:
-  version: v1.27.8+k3s2 # 2.6 v1.23.6+k3s1 / 2.7 v1.25.10+k3s1 / 2.8 v1.27.8+k3s2
+  version: v1.27.8+k3s2
 tf_vars:
   aws_access_key: # Your AWS Access Key
   aws_secret_key: # Your AWS Secret Key
@@ -80,33 +80,11 @@ tf_vars:
   aws_route53_fqdn: something.something.something
   aws_ec2_instance_type: m5.xlarge
 upgrade:
-  version: ""
+  version: "" # can be an empty string
   image: rancher/rancher
-  image_tag: v2.8-head
-  extra_env_name: "" # can be left empty
-  extra_env_value: "" # can be left empty
-```
-
-## Rancher Prime
-
-Added a new yml value `image`. If you want to use Rancher Prime, you need to set the image to `registry.rancher.com/rancher/rancher-prime`. Otherwise, set it as "rancher/rancher".
-
-For Rancher Prime the `repository_url` should be `https://releases.rancher.com/prime-charts/latest`
-
-`image_tag` & `version` can be set as empty strings in the yml if you just want `latest`.
-
-```yml
-# OTHER YML CONTINUED ABOVE (THIS IS JUST A SAMPLE SNIPPET)
-rancher:
-  repository_url: https://releases.rancher.com/prime-charts/latest
-  bootstrap_password: your-password-goes-here
-  version: ""
-  image: registry.rancher.com/rancher/rancher
-  image_tag: ""
-  psp_enabled: false
-  extra_env_name: "" # can be left empty
-  extra_env_value: "" # can be left empty
-# OTHER YML CONTINUED BELOW (THIS IS JUST A SAMPLE SNIPPET)
+  image_tag: v2.8-head # can be an empty string
+  extra_env_name: "" # can be an empty string
+  extra_env_value: "" # can be an empty string
 ```
 
 ## Local Execution
