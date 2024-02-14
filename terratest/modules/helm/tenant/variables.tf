@@ -17,11 +17,11 @@ variable "psp_enabled" {
 variable "extra_env_name" {
   description = "Name of the first extra environment variable"
   type        = string
-  default     = null
+  default     = ""
 }
 
 variable "extra_env_value" {
   description = "Value of the first extra environment variable"
   type        = string
-  default     = null
+  default     = ""
 }
