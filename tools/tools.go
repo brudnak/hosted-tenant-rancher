@@ -499,7 +499,8 @@ func (t *Tools) SetupImport(url string, password string, ip string) {
 
 	adminToken := t.CreateToken(url, password)
 	t.CreateImport(url, adminToken)
-	time.Sleep(time.Minute * 2)
+	// TODO: setup polling mechanism
+	time.Sleep(time.Minute * 4)
 	manifestUrl := t.GetManifestUrl(url, adminToken)
 	hcl.GenerateKubectlTfVar(ip, manifestUrl)
 	err := os.Setenv("KUBECONFIG", "theconfig.yml")
