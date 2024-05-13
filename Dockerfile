@@ -16,8 +16,8 @@ RUN wget -q https://get.helm.sh/helm-v3.7.0-linux-amd64.tar.gz && \
 
 # Install kubectl
 RUN apt-get update && apt-get install -y apt-transport-https ca-certificates curl && \
-    curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - && \
-    echo "deb https://apt.kubernetes.io/ kubernetes-xenial main" | tee /etc/apt/sources.list.d/kubernetes.list && \
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key |  gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg && \
+    echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list && \
     apt-get update && apt-get install -y kubectl && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
