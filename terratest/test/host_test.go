@@ -1,6 +1,7 @@
 package test
 
 import (
+	"errors"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -32,8 +33,17 @@ func TestCreateHostedTenantRancher(t *testing.T) {
 	}
 
 	createAWSVar()
-	os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))
-	os.Setenv("AWS_SECRET_ACCESS_KEY", viper.GetString("tf_vars.aws_secret_key"))
+
+	err = os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))
+	if err != nil {
+		log.Printf("error setting env: %v", err)
+	}
+
+	err = os.Setenv("AWS_SECRET_ACCESS_KEY", viper.GetString("tf_vars.aws_secret_key"))
+	if err != nil {
+		log.Printf("error setting env: %v", err)
+	}
+
 	terraformOptions := &terraform.Options{
 		TerraformDir: "../modules/aws",
 		NoColor:      true,
@@ -129,8 +139,12 @@ func TestUpgradeHostRancher(t *testing.T) {
 
 func TestSetupImport(t *testing.T) {
 
-	token := tools.CreateToken(hostUrl, password)
-	err := tools.CallBashScript(hostUrl, token)
+	token, err := tools.CreateToken(hostUrl, password)
+	if err != nil {
+		log.Fatal("error creating token:", err)
+	}
+
+	err = tools.CallBashScript(hostUrl, token)
 	if err != nil {
 		log.Println("error calling bash script", err)
 	}
@@ -179,8 +193,17 @@ func TestUpgradeTenantRancher(t *testing.T) {
 
 func TestJenkinsCleanup(t *testing.T) {
 	createAWSVar()
-	os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))
-	os.Setenv("AWS_SECRET_ACCESS_KEY", viper.GetString("tf_vars.aws_secret_key"))
+
+	err := os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))
+	if err != nil {
+		log.Printf("error setting env: %v", err)
+	}
+
+	err = os.Setenv("AWS_SECRET_ACCESS_KEY", viper.GetString("tf_vars.aws_secret_key"))
+	if err != nil {
+		log.Printf("error setting env: %v", err)
+	}
+
 	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
 		TerraformDir: "../modules/aws",
 		NoColor:      true,
@@ -192,7 +215,10 @@ func TestJenkinsCleanup(t *testing.T) {
 	})
 	terraform.Init(t, terraformOptions)
 	terraform.Destroy(t, terraformOptions)
-	defer deleteS3Object(viper.GetString("s3.bucket"), "terraform.tfstate")
+	err = deleteS3Object(viper.GetString("s3.bucket"), "terraform.tfstate")
+	if err != nil {
+		log.Printf("error deleting s3 object: %s", err)
+	}
 }
 
 func TestHostCleanup(t *testing.T) {
@@ -201,9 +227,20 @@ func TestHostCleanup(t *testing.T) {
 		NoColor:      true,
 	})
 
+	createAWSVar()
+	err := os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))
+	if err != nil {
+		log.Printf("error setting env: %v", err)
+	}
+
+	err = os.Setenv("AWS_SECRET_ACCESS_KEY", viper.GetString("tf_vars.aws_secret_key"))
+	if err != nil {
+		log.Printf("error setting env: %v", err)
+	}
+
 	terraform.Destroy(t, terraformOptions)
 
-	filepaths := []string{
+	filePaths := []string{
 		"../../host.yml",
 		"../../tenant.yml",
 		"../modules/helm/host/.terraform.lock.hcl",
@@ -227,24 +264,28 @@ func TestHostCleanup(t *testing.T) {
 		"../modules/aws/terraform.tfvars",
 	}
 
-	folderpaths := []string{
+	folderPaths := []string{
 		"../modules/helm/host/.terraform",
 		"../modules/helm/tenant/.terraform",
 		"../modules/kubectl/.terraform",
 		"../modules/aws/.terraform",
 	}
 
-	cleanupFiles(filepaths...)
-	cleanupFolders(folderpaths...)
+	cleanupFiles(filePaths...)
+	cleanupFolders(folderPaths...)
 	viper.AddConfigPath("../../")
 	viper.SetConfigName("config")
 	viper.SetConfigType("yml")
-	err := viper.ReadInConfig()
 
+	err = viper.ReadInConfig()
 	if err != nil {
 		log.Println("error reading config:", err)
 	}
-	defer deleteS3Object(viper.GetString("s3.bucket"), "terraform.tfstate")
+
+	err = deleteS3Object(viper.GetString("s3.bucket"), "terraform.tfstate")
+	if err != nil {
+		log.Printf("error deleting s3 object: %s", err)
+	}
 }
 
 func cleanupFiles(paths ...string) {
@@ -270,7 +311,6 @@ func createAWSVar() {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yml")
 	err := viper.ReadInConfig()
-
 	if err != nil {
 		log.Println("error reading config:", err)
 	}
@@ -300,12 +340,21 @@ func deleteS3Object(bucket string, item string) error {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yml")
 	err := viper.ReadInConfig()
-
-	os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))
-	os.Setenv("AWS_SECRET_ACCESS_KEY", viper.GetString("tf_vars.aws_secret_key"))
-
 	if err != nil {
-		log.Println("error reading config:", err)
+		log.Println("Error reading config")
+		return err
+	}
+
+	err = os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))
+	if err != nil {
+		log.Println("Error setting env")
+		return err
+	}
+
+	err = os.Setenv("AWS_SECRET_ACCESS_KEY", viper.GetString("tf_vars.aws_secret_key"))
+	if err != nil {
+		log.Println("Error setting env")
+		return err
 	}
 
 	sess, _ := session.NewSession(&aws.Config{
@@ -336,11 +385,16 @@ func checkS3ObjectExists(item string) error {
 	viper.SetConfigType("yml")
 	err := viper.ReadInConfig()
 
-	os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))
-	os.Setenv("AWS_SECRET_ACCESS_KEY", viper.GetString("tf_vars.aws_secret_key"))
-
+	err = os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))
 	if err != nil {
-		log.Println("error reading config:", err)
+		log.Println("Error setting env")
+		return err
+	}
+
+	err = os.Setenv("AWS_SECRET_ACCESS_KEY", viper.GetString("tf_vars.aws_secret_key"))
+	if err != nil {
+		log.Println("Error setting env")
+		return err
 	}
 
 	sess, _ := session.NewSession(&aws.Config{
@@ -354,8 +408,9 @@ func checkS3ObjectExists(item string) error {
 	_, err = svc.HeadObject(&s3.HeadObjectInput{Bucket: aws.String(bucket), Key: aws.String(item)})
 	if err != nil {
 		// If the error is due to the file not existing, that's fine, and we return nil.
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
+		var aErr awserr.Error
+		if errors.As(err, &aErr) {
+			switch aErr.Code() {
 			case s3.ErrCodeNoSuchKey, "NotFound":
 				return nil
 			}

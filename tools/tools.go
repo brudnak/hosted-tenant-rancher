@@ -227,8 +227,7 @@ func (t *Tools) K3STenantInstall(config K3SConfig) string {
 	return configIP
 }
 
-func (t *Tools) CreateToken(url string, password string) string {
-
+func (t *Tools) CreateToken(url string, password string) (string, error) {
 	loginPayload := LoginPayload{
 		Description:  t.RandomString(6),
 		ResponseType: "token",
@@ -237,28 +236,25 @@ func (t *Tools) CreateToken(url string, password string) string {
 	}
 
 	loginBody, err := json.Marshal(loginPayload)
-
 	if err != nil {
-		log.Println(err)
+		return "", err
 	}
 
 	adminLogin := fmt.Sprintf("https://%s/v3-public/localProviders/local?action=login", url)
 	resp, err := http.Post(adminLogin, "application/json", bytes.NewBuffer(loginBody))
-
-	if resp == nil {
-		log.Println("response was nil")
+	if err != nil {
+		return "", err
 	}
 
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Println(err)
+		return "", err
 	}
 
 	var loginResp LoginResponse
 	err = json.Unmarshal(b, &loginResp)
-
 	if err != nil {
-		log.Println(err)
+		return "", err
 	}
 
 	client := &http.Client{
@@ -269,49 +265,46 @@ func (t *Tools) CreateToken(url string, password string) string {
 		Type:        "token",
 		Metadata:    struct{}{},
 		Description: "ADMIN_TOKEN",
-		TTL:         0,
+		TTL:         7776000000,
 	}
 
 	jsonTokenBody, err := json.Marshal(tokenBody)
 	if err != nil {
-		log.Println(err)
+		return "", err
 	}
 
 	tokenUrl := fmt.Sprintf("https://%s/v3/tokens", url)
 	req, err := http.NewRequest("POST", tokenUrl, bytes.NewBuffer(jsonTokenBody))
-
 	if err != nil {
-		log.Println(err)
+		return "", err
 	}
 
 	bearer := fmt.Sprintf("Bearer %s", loginResp.Token)
-
 	req.Header.Set("Authorization", bearer)
 
 	response, err := client.Do(req)
 	if err != nil {
-		log.Println(err)
+		return "", err
 	}
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
 		if err != nil {
-			log.Println(err)
+			// Handle the error if needed
 		}
 	}(response.Body)
 
 	tokenBytes, err := io.ReadAll(response.Body)
 	if err != nil {
-		log.Println(err)
+		return "", err
 	}
 
 	var tokenRes TokenResponse
 	err = json.Unmarshal(tokenBytes, &tokenRes)
-
 	if err != nil {
-		log.Println(err)
+		return "", err
 	}
 
-	return tokenRes.Token
+	return tokenRes.Token, nil
 }
 
 func (t *Tools) RunCommand(cmd string, pubIP string) (string, error) {
@@ -497,14 +490,19 @@ func (t *Tools) CallBashScript(serverUrl, rancherToken string) error {
 
 func (t *Tools) SetupImport(url string, password string, ip string) {
 
-	adminToken := t.CreateToken(url, password)
+	adminToken, err := t.CreateToken(url, password)
+	if err != nil {
+		e := fmt.Errorf("error creating token: %v", err)
+		e.Error()
+	}
+
 	t.CreateImport(url, adminToken)
 	// TODO: setup polling mechanism
-	time.Sleep(time.Minute * 4)
+	time.Sleep(time.Minute * 5)
 	manifestUrl := t.GetManifestUrl(url, adminToken)
 	hcl.GenerateKubectlTfVar(ip, manifestUrl)
-	err := os.Setenv("KUBECONFIG", "theconfig.yml")
 
+	err = os.Setenv("KUBECONFIG", "theconfig.yml")
 	if err != nil {
 		fmt.Println("error setup import:", err)
 		return
