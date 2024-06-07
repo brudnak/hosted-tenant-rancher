@@ -25,9 +25,15 @@ var configIp string
 
 var tools toolkit.Tools
 
+const (
+	tfVars        = "terraform.tfvars"
+	tfState       = "terraform.tfstate"
+	tfStateBackup = "terraform.tfstate.backup"
+)
+
 func TestCreateHostedTenantRancher(t *testing.T) {
 
-	err := checkS3ObjectExists("terraform.tfstate")
+	err := checkS3ObjectExists(tfState)
 	if err != nil {
 		log.Fatal("Error checking if tfstate exists in s3:", err)
 	}
@@ -49,7 +55,7 @@ func TestCreateHostedTenantRancher(t *testing.T) {
 		NoColor:      true,
 		BackendConfig: map[string]interface{}{
 			"bucket": viper.GetString("s3.bucket"),
-			"key":    "terraform.tfstate",
+			"key":    tfState,
 			"region": viper.GetString("s3.region"),
 		},
 	}
@@ -120,9 +126,9 @@ func TestInstallHostRancher(t *testing.T) {
 
 func TestUpgradeHostRancher(t *testing.T) {
 
-	cleanupFiles("../modules/helm/host/terraform.tfvars")
+	cleanupFiles("../modules/helm/host/" + tfVars)
 	originalPath := "../modules/helm/host/upgrade.tfvars"
-	newPath := "../modules/helm/host/terraform.tfvars"
+	newPath := "../modules/helm/host/" + tfVars
 	e := os.Rename(originalPath, newPath)
 	if e != nil {
 		log.Fatal(e)
@@ -151,7 +157,7 @@ func TestSetupImport(t *testing.T) {
 	time.Sleep(20 * time.Second)
 	tools.SetupImport(hostUrl, password, configIp)
 
-	err = os.Setenv("KUBECONFIG", "theconfig.yml")
+	err = os.Setenv("KUBECONFIG", toolkit.TenantKubeConfig)
 	if err != nil {
 		log.Println("error setting env", err)
 	}
@@ -175,9 +181,9 @@ func TestInstallTenantRancher(t *testing.T) {
 
 func TestUpgradeTenantRancher(t *testing.T) {
 
-	cleanupFiles("../modules/helm/tenant/terraform.tfvars")
+	cleanupFiles("../modules/helm/tenant/" + tfVars)
 	originalPath := "../modules/helm/tenant/upgrade.tfvars"
-	newPath := "../modules/helm/tenant/terraform.tfvars"
+	newPath := "../modules/helm/tenant/" + tfVars
 	e := os.Rename(originalPath, newPath)
 	if e != nil {
 		log.Fatal(e)
@@ -209,13 +215,13 @@ func TestJenkinsCleanup(t *testing.T) {
 		NoColor:      true,
 		BackendConfig: map[string]interface{}{
 			"bucket": viper.GetString("s3.bucket"),
-			"key":    "terraform.tfstate",
+			"key":    tfState,
 			"region": viper.GetString("s3.region"),
 		},
 	})
 	terraform.Init(t, terraformOptions)
 	terraform.Destroy(t, terraformOptions)
-	err = deleteS3Object(viper.GetString("s3.bucket"), "terraform.tfstate")
+	err = deleteS3Object(viper.GetString("s3.bucket"), tfState)
 	if err != nil {
 		log.Printf("error deleting s3 object: %s", err)
 	}
@@ -244,24 +250,24 @@ func TestHostCleanup(t *testing.T) {
 		"../../host.yml",
 		"../../tenant.yml",
 		"../modules/helm/host/.terraform.lock.hcl",
-		"../modules/helm/host/terraform.tfstate",
-		"../modules/helm/host/terraform.tfstate.backup",
-		"../modules/helm/host/terraform.tfvars",
+		"../modules/helm/host/" + tfState,
+		"../modules/helm/host/" + tfStateBackup,
+		"../modules/helm/host/" + tfVars,
 		"../modules/helm/host/upgrade.tfvars",
 		"../modules/helm/tenant/.terraform.lock.hcl",
-		"../modules/helm/tenant/terraform.tfstate",
-		"../modules/helm/tenant/terraform.tfstate.backup",
-		"../modules/helm/tenant/terraform.tfvars",
+		"../modules/helm/tenant/" + tfState,
+		"../modules/helm/tenant/" + tfStateBackup,
+		"../modules/helm/tenant/" + tfVars,
 		"../modules/helm/tenant/upgrade.tfvars",
 		"../modules/kubectl/.terraform.lock.hcl",
-		"../modules/kubectl/terraform.tfstate",
-		"../modules/kubectl/terraform.tfstate.backup",
-		"../modules/kubectl/terraform.tfvars",
-		"../modules/kubectl/theconfig.yml",
+		"../modules/kubectl/" + tfState,
+		"../modules/kubectl/" + tfStateBackup,
+		"../modules/kubectl/" + tfVars,
+		"../modules/kubectl/" + toolkit.TenantKubeConfig,
 		"../modules/aws/.terraform.lock.hcl",
-		"../modules/aws/terraform.tfstate",
-		"../modules/aws/terraform.tfstate.backup",
-		"../modules/aws/terraform.tfvars",
+		"../modules/aws/" + tfState,
+		"../modules/aws/" + tfStateBackup,
+		"../modules/aws/" + tfVars,
 	}
 
 	folderPaths := []string{
@@ -282,7 +288,7 @@ func TestHostCleanup(t *testing.T) {
 		log.Println("error reading config:", err)
 	}
 
-	err = deleteS3Object(viper.GetString("s3.bucket"), "terraform.tfstate")
+	err = deleteS3Object(viper.GetString("s3.bucket"), tfState)
 	if err != nil {
 		log.Printf("error deleting s3 object: %s", err)
 	}

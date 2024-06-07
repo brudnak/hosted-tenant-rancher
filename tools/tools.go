@@ -19,7 +19,10 @@ import (
 	"github.com/spf13/viper"
 )
 
-const randomStringSource = "abcdefghijklmnopqrstuvwxyz"
+const (
+	randomStringSource = "abcdefghijklmnopqrstuvwxyz"
+	TenantKubeConfig   = "tenant_kube_config.yml"
+)
 
 type Tools struct{}
 
@@ -192,7 +195,7 @@ func (t *Tools) K3STenantInstall(config K3SConfig) string {
 		log.Println("failed creating tenant config:", err)
 	}
 
-	err = os.WriteFile("../../terratest/modules/kubectl/theconfig.yml", output, 0644)
+	err = os.WriteFile("../../terratest/modules/kubectl/"+TenantKubeConfig, output, 0644)
 	if err != nil {
 		log.Println("failed creating tenant config:", err)
 	}
@@ -502,7 +505,7 @@ func (t *Tools) SetupImport(url string, password string, ip string) {
 	manifestUrl := t.GetManifestUrl(url, adminToken)
 	hcl.GenerateKubectlTfVar(ip, manifestUrl)
 
-	err = os.Setenv("KUBECONFIG", "theconfig.yml")
+	err = os.Setenv("KUBECONFIG", TenantKubeConfig)
 	if err != nil {
 		fmt.Println("error setup import:", err)
 		return

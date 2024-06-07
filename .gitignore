@@ -316,5 +316,5 @@ config
 config.yml
 host.yml
 tenant.yml
-theconfig.yml
+tenant_kube_config.yml
 upgrade.tfvars
