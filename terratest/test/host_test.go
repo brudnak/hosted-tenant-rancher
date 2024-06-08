@@ -154,7 +154,7 @@ func TestSetupImport(t *testing.T) {
 	if err != nil {
 		log.Println("error calling bash script", err)
 	}
-	time.Sleep(20 * time.Second)
+	time.Sleep(90 * time.Second)
 	tools.SetupImport(hostUrl, password, configIp)
 
 	err = os.Setenv("KUBECONFIG", toolkit.TenantKubeConfig)
