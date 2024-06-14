@@ -2,6 +2,7 @@ package test
 
 import (
 	"errors"
+	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -16,13 +17,12 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/gruntwork-io/terratest/modules/terraform"
-	"github.com/stretchr/testify/assert"
 )
 
+var currentTenantIndex int
 var hostUrl string
 var password string
-var configIp string
-
+var configIps []string
 var tools toolkit.Tools
 
 const (
@@ -31,7 +31,7 @@ const (
 	tfStateBackup = "terraform.tfstate.backup"
 )
 
-func TestCreateHostedTenantRancher(t *testing.T) {
+func TestHosted(t *testing.T) {
 
 	err := checkS3ObjectExists(tfState)
 	if err != nil {
@@ -50,6 +50,11 @@ func TestCreateHostedTenantRancher(t *testing.T) {
 		log.Printf("error setting env: %v", err)
 	}
 
+	err = hcl.GenerateAWSMainTF(viper.GetInt("tenant_instances"))
+	if err != nil {
+		log.Println(err)
+	}
+
 	terraformOptions := &terraform.Options{
 		TerraformDir: "../modules/aws",
 		NoColor:      true,
@@ -62,55 +67,80 @@ func TestCreateHostedTenantRancher(t *testing.T) {
 
 	terraform.InitAndApply(t, terraformOptions)
 
-	infra1Server1IPAddress := terraform.Output(t, terraformOptions, "infra1_server1_ip")
-	infra1Server2IPAddress := terraform.Output(t, terraformOptions, "infra1_server2_ip")
-	infra1MysqlEndpoint := terraform.Output(t, terraformOptions, "infra1_mysql_endpoint")
-	infra1MysqlPassword := terraform.Output(t, terraformOptions, "infra1_mysql_password")
-	infra1RancherURL := terraform.Output(t, terraformOptions, "infra1_rancher_url")
+	tenantInstances := viper.GetInt("tenant_instances")
 
-	infra2Server1IPAddress := terraform.Output(t, terraformOptions, "infra2_server1_ip")
-	infra2Server2IPAddress := terraform.Output(t, terraformOptions, "infra2_server2_ip")
-	infra2MysqlEndpoint := terraform.Output(t, terraformOptions, "infra2_mysql_endpoint")
-	infra2MysqlPassword := terraform.Output(t, terraformOptions, "infra2_mysql_password")
-	infra2RancherURL := terraform.Output(t, terraformOptions, "infra2_rancher_url")
+	var hostConfig toolkit.K3SConfig
+	var tenantConfigs []toolkit.K3SConfig
 
-	noneOneIPAddressValidationResult := tools.CheckIPAddress(infra1Server1IPAddress)
-	nodeTwoIPAddressValidationResult := tools.CheckIPAddress(infra1Server2IPAddress)
+	for i := 0; i < tenantInstances; i++ {
+		infraServer1IPAddress := terraform.Output(t, terraformOptions, fmt.Sprintf("infra%d_server1_ip", i+1))
+		infraServer2IPAddress := terraform.Output(t, terraformOptions, fmt.Sprintf("infra%d_server2_ip", i+1))
+		infraMysqlEndpoint := terraform.Output(t, terraformOptions, fmt.Sprintf("infra%d_mysql_endpoint", i+1))
+		infraMysqlPassword := terraform.Output(t, terraformOptions, fmt.Sprintf("infra%d_mysql_password", i+1))
+		infraRancherURL := terraform.Output(t, terraformOptions, fmt.Sprintf("infra%d_rancher_url", i+1))
 
-	assert.Equal(t, "valid", noneOneIPAddressValidationResult)
-	assert.Equal(t, "valid", nodeTwoIPAddressValidationResult)
-
-	host := toolkit.K3SConfig{
-		DBPassword: infra1MysqlPassword,
-		DBEndpoint: infra1MysqlEndpoint,
-		RancherURL: infra1RancherURL,
-		Node1IP:    infra1Server1IPAddress,
-		Node2IP:    infra1Server2IPAddress,
+		if i == 0 {
+			// Host configuration
+			hostConfig = toolkit.K3SConfig{
+				DBPassword: infraMysqlPassword,
+				DBEndpoint: infraMysqlEndpoint,
+				RancherURL: infraRancherURL,
+				Node1IP:    infraServer1IPAddress,
+				Node2IP:    infraServer2IPAddress,
+			}
+		} else {
+			// Tenant configurations
+			tenantConfig := toolkit.K3SConfig{
+				DBPassword: infraMysqlPassword,
+				DBEndpoint: infraMysqlEndpoint,
+				RancherURL: infraRancherURL,
+				Node1IP:    infraServer1IPAddress,
+				Node2IP:    infraServer2IPAddress,
+			}
+			tenantConfigs = append(tenantConfigs, tenantConfig)
+		}
 	}
 
-	tenant := toolkit.K3SConfig{
-		DBPassword: infra2MysqlPassword,
-		DBEndpoint: infra2MysqlEndpoint,
-		RancherURL: infra2RancherURL,
-		Node1IP:    infra2Server1IPAddress,
-		Node2IP:    infra2Server2IPAddress,
+	tools.K3SHostInstall(hostConfig)
+
+	for i, tenantConfig := range tenantConfigs {
+		tenantIndex := i + 1
+
+		err := createTenantDirectories(tenantIndex)
+		if err != nil {
+			t.Fatalf("failed to create tenant directories: %v", err)
+		}
+
+		err = tools.GenerateKubectlTenantConfig(tenantIndex)
+		if err != nil {
+			t.Fatalf("failed to generate kubectl tenant config: %v", err)
+		}
+
+		err = tools.GenerateHelmTenantConfig(tenantIndex)
+		if err != nil {
+			t.Fatalf("failed to generate helm tenant config: %v", err)
+		}
+
+		tenantIp := tools.K3STenantInstall(tenantConfig, tenantIndex)
+		configIps = append(configIps, tenantIp)
+
+		currentTenantIndex = tenantIndex
+		t.Run(fmt.Sprintf("setup rancher import for tenant %d", tenantIndex), func(t *testing.T) {
+			TestSetupImport(t)
+		})
+		t.Run(fmt.Sprintf("install tenant rancher %d", tenantIndex), func(t *testing.T) {
+			TestInstallTenantRancher(t)
+		})
+
+		log.Printf("Tenant Rancher %d https://%s", tenantIndex, tenantConfig.RancherURL)
 	}
-
-	tools.K3SHostInstall(host)
-	tenantIp := tools.K3STenantInstall(tenant)
-
-	configIp = tenantIp
 
 	t.Run("install host rancher", TestInstallHostRancher)
 
-	hostUrl = infra1RancherURL
+	hostUrl = hostConfig.RancherURL
 	password = viper.GetString("rancher.bootstrap_password")
 
-	t.Run("setup rancher import", TestSetupImport)
-	t.Run("install tenant rancher", TestInstallTenantRancher)
-
-	log.Printf("Host Rancher https://%s", infra1RancherURL)
-	log.Printf("Tenant Rancher https://%s", infra2RancherURL)
+	log.Printf("Host Rancher https://%s", hostConfig.RancherURL)
 }
 
 func TestInstallHostRancher(t *testing.T) {
@@ -144,6 +174,7 @@ func TestUpgradeHostRancher(t *testing.T) {
 }
 
 func TestSetupImport(t *testing.T) {
+	tenantIndex := currentTenantIndex
 
 	token, err := tools.CreateToken(hostUrl, password)
 	if err != nil {
@@ -155,25 +186,28 @@ func TestSetupImport(t *testing.T) {
 		log.Println("error calling bash script", err)
 	}
 	time.Sleep(90 * time.Second)
+
+	configIp := configIps[tenantIndex-1]
 	tools.SetupImport(hostUrl, password, configIp)
 
-	err = os.Setenv("KUBECONFIG", toolkit.TenantKubeConfig)
+	tenantKubeConfigPath := fmt.Sprintf("../modules/kubectl/tenant-%d/tenant_kube_config.yml", tenantIndex)
+	err = os.Setenv("KUBECONFIG", tenantKubeConfigPath)
 	if err != nil {
 		log.Println("error setting env", err)
 	}
 
 	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
-
-		TerraformDir: "../modules/kubectl",
+		TerraformDir: fmt.Sprintf("../modules/kubectl/tenant-%d", tenantIndex),
 		NoColor:      true,
 	})
 	terraform.InitAndApply(t, terraformOptions)
 }
 
 func TestInstallTenantRancher(t *testing.T) {
-	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
+	tenantIndex := currentTenantIndex
 
-		TerraformDir: "../modules/helm/tenant",
+	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
+		TerraformDir: fmt.Sprintf("../modules/helm/tenant-%d", tenantIndex),
 		NoColor:      true,
 	})
 	terraform.InitAndApply(t, terraformOptions)
@@ -291,6 +325,11 @@ func TestHostCleanup(t *testing.T) {
 	err = deleteS3Object(viper.GetString("s3.bucket"), tfState)
 	if err != nil {
 		log.Printf("error deleting s3 object: %s", err)
+	}
+
+	err = hcl.CleanupTerraformConfig()
+	if err != nil {
+		log.Printf("error cleaning up main.tf and dirs: %s", err)
 	}
 }
 
@@ -427,5 +466,22 @@ func checkS3ObjectExists(item string) error {
 
 	// If we get to this point, it means the file exists, so we log an error message and exit the program.
 	log.Fatalf("A tfstate file already exists in bucket %s. Please clean up the old hosted/tenant environment before creating a new one.", bucket)
+	return nil
+}
+
+func createTenantDirectories(tenantIndex int) error {
+	kubectlDir := fmt.Sprintf("../modules/kubectl/tenant-%d", tenantIndex)
+	helmDir := fmt.Sprintf("../modules/helm/tenant-%d", tenantIndex)
+
+	err := os.MkdirAll(kubectlDir, os.ModePerm)
+	if err != nil {
+		return fmt.Errorf("failed to create kubectl directory for tenant %d: %v", tenantIndex, err)
+	}
+
+	err = os.MkdirAll(helmDir, os.ModePerm)
+	if err != nil {
+		return fmt.Errorf("failed to create helm directory for tenant %d: %v", tenantIndex, err)
+	}
+
 	return nil
 }

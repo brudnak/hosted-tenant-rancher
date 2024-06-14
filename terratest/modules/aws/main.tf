@@ -1,4 +1,3 @@
-# use aws provider
 terraform {
   required_providers {
     aws = {
@@ -9,6 +8,7 @@ terraform {
   backend "s3" {}
 }
 
+# dynamic write happens below here
 module "high-availability-infrastructure-1" {
   source                = "./modules/k3s-ha"
   aws_prefix            = var.aws_prefix
@@ -26,7 +26,6 @@ module "high-availability-infrastructure-1" {
   aws_route53_fqdn      = var.aws_route53_fqdn
   aws_ec2_instance_type = var.aws_ec2_instance_type
 }
-
 module "high-availability-infrastructure-2" {
   source                = "./modules/k3s-ha"
   aws_prefix            = var.aws_prefix
@@ -43,4 +42,36 @@ module "high-availability-infrastructure-2" {
   aws_rds_password      = var.aws_rds_password
   aws_route53_fqdn      = var.aws_route53_fqdn
   aws_ec2_instance_type = var.aws_ec2_instance_type
+}
+output "infra1_server1_ip" {
+  value = module.high-availability-infrastructure-1.server1_ip
+}
+output "infra1_server2_ip" {
+  value = module.high-availability-infrastructure-1.server2_ip
+}
+output "infra1_mysql_endpoint" {
+  value = module.high-availability-infrastructure-1.mysql_endpoint
+}
+output "infra1_mysql_password" {
+  value     = module.high-availability-infrastructure-1.mysql_password
+  sensitive = true
+}
+output "infra1_rancher_url" {
+  value = module.high-availability-infrastructure-1.rancher_url
+}
+output "infra2_server1_ip" {
+  value = module.high-availability-infrastructure-2.server1_ip
+}
+output "infra2_server2_ip" {
+  value = module.high-availability-infrastructure-2.server2_ip
+}
+output "infra2_mysql_endpoint" {
+  value = module.high-availability-infrastructure-2.mysql_endpoint
+}
+output "infra2_mysql_password" {
+  value     = module.high-availability-infrastructure-2.mysql_password
+  sensitive = true
+}
+output "infra2_rancher_url" {
+  value = module.high-availability-infrastructure-2.rancher_url
 }
