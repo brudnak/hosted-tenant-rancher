@@ -496,21 +496,15 @@ func (t *Tools) CallBashScript(serverUrl, rancherToken string) error {
 	return err
 }
 
-func (t *Tools) SetupImport(url string, password string, ip string) {
+func (t *Tools) SetupImport(url string, token string, ip string, tenantIndex int) {
 
-	adminToken, err := t.CreateToken(url, password)
-	if err != nil {
-		e := fmt.Errorf("error creating token: %v", err)
-		e.Error()
-	}
+	t.CreateImport(url, token)
+	time.Sleep(4 * time.Minute)
 
-	t.CreateImport(url, adminToken)
-	// TODO: setup polling mechanism
-	time.Sleep(time.Minute * 5)
-	manifestUrl := t.GetManifestUrl(url, adminToken)
-	hcl.GenerateKubectlTfVar(ip, manifestUrl)
-
-	err = os.Setenv("KUBECONFIG", TenantKubeConfig)
+	manifestUrl := t.GetManifestUrl(url, token)
+	hcl.GenerateKubectlTfVar(ip, manifestUrl, tenantIndex)
+	tenantKubeConfigPath := fmt.Sprintf("../modules/kubectl/tenant-%d/tenant_kube_config.yml", tenantIndex)
+	err := os.Setenv("KUBECONFIG", tenantKubeConfigPath)
 	if err != nil {
 		fmt.Println("error setup import:", err)
 		return

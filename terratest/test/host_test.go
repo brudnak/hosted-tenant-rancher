@@ -7,21 +7,20 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	toolkit "github.com/brudnak/hosted-tenant-rancher/tools"
 	"github.com/brudnak/hosted-tenant-rancher/tools/hcl"
+	"github.com/spf13/viper"
 	"log"
 	"os"
 	"testing"
-	"time"
-
-	toolkit "github.com/brudnak/hosted-tenant-rancher/tools"
-	"github.com/spf13/viper"
 
 	"github.com/gruntwork-io/terratest/modules/terraform"
 )
 
+var adminToken string
 var currentTenantIndex int
 var hostUrl string
-var password string
+var adminPassword string
 var configIps []string
 var tools toolkit.Tools
 
@@ -80,6 +79,9 @@ func TestHosted(t *testing.T) {
 		infraRancherURL := terraform.Output(t, terraformOptions, fmt.Sprintf("infra%d_rancher_url", i+1))
 
 		if i == 0 {
+
+			// Set Host URL
+			hostUrl = infraRancherURL
 			// Host configuration
 			hostConfig = toolkit.K3SConfig{
 				DBPassword: infraMysqlPassword,
@@ -102,6 +104,28 @@ func TestHosted(t *testing.T) {
 	}
 
 	tools.K3SHostInstall(hostConfig)
+	t.Run("install host rancher", TestInstallHostRancher)
+
+	viper.AddConfigPath("../../")
+	viper.SetConfigName("config")
+	viper.SetConfigType("yml")
+	err = viper.ReadInConfig()
+	if err != nil {
+		log.Println("error reading config:", err)
+	}
+
+	adminPassword = viper.GetString("rancher.bootstrap_password")
+	adminToken, err = tools.CreateToken(hostUrl, adminPassword)
+	if err != nil {
+		log.Fatal("error creating token:", err)
+	}
+
+	err = tools.CallBashScript(hostUrl, adminToken)
+	if err != nil {
+		log.Println("error calling bash script", err)
+	}
+
+	log.Printf("Host Rancher https://%s", hostConfig.RancherURL)
 
 	for i, tenantConfig := range tenantConfigs {
 		tenantIndex := i + 1
@@ -134,13 +158,6 @@ func TestHosted(t *testing.T) {
 
 		log.Printf("Tenant Rancher %d https://%s", tenantIndex, tenantConfig.RancherURL)
 	}
-
-	t.Run("install host rancher", TestInstallHostRancher)
-
-	hostUrl = hostConfig.RancherURL
-	password = viper.GetString("rancher.bootstrap_password")
-
-	log.Printf("Host Rancher https://%s", hostConfig.RancherURL)
 }
 
 func TestInstallHostRancher(t *testing.T) {
@@ -175,23 +192,11 @@ func TestUpgradeHostRancher(t *testing.T) {
 
 func TestSetupImport(t *testing.T) {
 	tenantIndex := currentTenantIndex
-
-	token, err := tools.CreateToken(hostUrl, password)
-	if err != nil {
-		log.Fatal("error creating token:", err)
-	}
-
-	err = tools.CallBashScript(hostUrl, token)
-	if err != nil {
-		log.Println("error calling bash script", err)
-	}
-	time.Sleep(90 * time.Second)
-
 	configIp := configIps[tenantIndex-1]
-	tools.SetupImport(hostUrl, password, configIp)
+	tools.SetupImport(hostUrl, adminToken, configIp, tenantIndex)
 
 	tenantKubeConfigPath := fmt.Sprintf("../modules/kubectl/tenant-%d/tenant_kube_config.yml", tenantIndex)
-	err = os.Setenv("KUBECONFIG", tenantKubeConfigPath)
+	err := os.Setenv("KUBECONFIG", tenantKubeConfigPath)
 	if err != nil {
 		log.Println("error setting env", err)
 	}

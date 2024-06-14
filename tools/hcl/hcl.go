@@ -191,10 +191,10 @@ func CleanupTerraformConfig() error {
 	return nil
 }
 
-func GenerateKubectlTfVar(configIp string, manifestUrl string) {
+func GenerateKubectlTfVar(configIp string, manifestUrl string, tenantIndex int) {
 	f := hclwrite.NewEmptyFile()
 
-	tfVarsFile, err := os.Create("../../terratest/modules/kubectl/terraform.tfvars")
+	tfVarsFile, err := os.Create(fmt.Sprintf("../../terratest/modules/kubectl/tenant-%d/terraform.tfvars", tenantIndex))
 	if err != nil {
 		fmt.Println(err)
 		return
