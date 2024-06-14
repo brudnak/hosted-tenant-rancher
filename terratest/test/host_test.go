@@ -13,6 +13,7 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/gruntwork-io/terratest/modules/terraform"
 )
@@ -203,6 +204,8 @@ func TestUpgradeHostRancher(t *testing.T) {
 func TestSetupImport(t *testing.T) {
 	tenantIndex := currentTenantIndex
 	configIp := configIps[tenantIndex-1]
+
+	time.Sleep(3 * time.Minute)
 	tools.SetupImport(hostUrl, adminToken, configIp, tenantIndex)
 
 	tenantKubeConfigPath := fmt.Sprintf("../modules/kubectl/tenant-%d/tenant_kube_config.yml", tenantIndex)

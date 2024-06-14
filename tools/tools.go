@@ -388,7 +388,7 @@ func (t *Tools) RemoveFolder(folderPath string) error {
 	return nil
 }
 
-func (t *Tools) CreateImport(url string, token string, tenantIndex int) {
+func (t *Tools) CreateImport(url string, token string, tenantIndex int) error {
 	impPay := ImportPayload{
 		Type: "provisioning.cattle.io.cluster",
 		Metadata: struct {
@@ -403,7 +403,7 @@ func (t *Tools) CreateImport(url string, token string, tenantIndex int) {
 
 	importBody, err := json.Marshal(impPay)
 	if err != nil {
-		log.Println(err)
+		return fmt.Errorf("error marshalling import payload: %v", err)
 	}
 
 	client := &http.Client{
@@ -412,18 +412,15 @@ func (t *Tools) CreateImport(url string, token string, tenantIndex int) {
 
 	importUrl := fmt.Sprintf("https://%s/v1/provisioning.cattle.io.clusters", url)
 	req, err := http.NewRequest("POST", importUrl, bytes.NewBuffer(importBody))
-
 	if err != nil {
-		log.Println(err)
+		return fmt.Errorf("error setting up http.NewRequest > tools.go > CreateImport: %v", err)
 	}
 
 	bearer := fmt.Sprintf("Bearer %s", token)
-
 	req.Header.Set("Authorization", bearer)
-
 	response, err := client.Do(req)
 	if err != nil {
-		log.Println(err)
+		return fmt.Errorf("error from client.Do > tools.go > CreateImport: %v", err)
 	}
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
@@ -431,16 +428,13 @@ func (t *Tools) CreateImport(url string, token string, tenantIndex int) {
 			log.Println(err)
 		}
 	}(response.Body)
-
-	fmt.Println(response)
+	return nil
 }
 
-func (t *Tools) GetManifestUrl(url string, token string, tenantIndex int) string {
+func (t *Tools) GetManifestUrl(url string, token string) string {
 	client := &http.Client{
 		Timeout: time.Second * 10,
 	}
-
-	fmt.Println(tenantIndex)
 
 	registrationUrl := fmt.Sprintf("https://%s/v3/clusterregistrationtokens", url)
 	req, err := http.NewRequest("GET", registrationUrl, nil)
@@ -543,10 +537,14 @@ func (t *Tools) SetupImport(url string, password string, ip string, tenantIndex 
 		e.Error()
 	}
 
-	time.Sleep(time.Second * 10)
-	t.CreateImport(url, adminToken, tenantIndex)
+	time.Sleep(time.Second * 30)
+	err = t.CreateImport(url, adminToken, tenantIndex)
+	if err != nil {
+		log.Fatalf("error creating import: %v", err)
+	}
 
-	manifestUrl := t.GetManifestUrl(url, adminToken, tenantIndex)
+	time.Sleep(time.Minute * 5)
+	manifestUrl := t.GetManifestUrl(url, adminToken)
 	if manifestUrl == "" {
 		log.Fatal("error from tools.go > SetupImport > manifestUrl is empty")
 	}
