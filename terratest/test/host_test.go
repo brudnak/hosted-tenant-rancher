@@ -32,9 +32,14 @@ const (
 
 func TestHosted(t *testing.T) {
 
-	err := checkS3ObjectExists(tfState)
+	err := validatedRancherInstanceCount()
 	if err != nil {
-		log.Fatal("Error checking if tfstate exists in s3:", err)
+		log.Fatal("Error with rancher instance count: ", err)
+	}
+
+	err = checkS3ObjectExists(tfState)
+	if err != nil {
+		log.Fatal("Error checking if tfstate exists in s3: ", err)
 	}
 
 	createAWSVar()
@@ -49,7 +54,7 @@ func TestHosted(t *testing.T) {
 		log.Printf("error setting env: %v", err)
 	}
 
-	err = hcl.GenerateAWSMainTF(viper.GetInt("tenant_instances"))
+	err = hcl.GenerateAWSMainTF(viper.GetInt("total_rancher_instances"))
 	if err != nil {
 		log.Println(err)
 	}
@@ -66,12 +71,12 @@ func TestHosted(t *testing.T) {
 
 	terraform.InitAndApply(t, terraformOptions)
 
-	tenantInstances := viper.GetInt("tenant_instances")
+	totalInstances := viper.GetInt("total_rancher_instances")
 
 	var hostConfig toolkit.K3SConfig
 	var tenantConfigs []toolkit.K3SConfig
 
-	for i := 0; i < tenantInstances; i++ {
+	for i := 0; i < totalInstances; i++ {
 		infraServer1IPAddress := terraform.Output(t, terraformOptions, fmt.Sprintf("infra%d_server1_ip", i+1))
 		infraServer2IPAddress := terraform.Output(t, terraformOptions, fmt.Sprintf("infra%d_server2_ip", i+1))
 		infraMysqlEndpoint := terraform.Output(t, terraformOptions, fmt.Sprintf("infra%d_mysql_endpoint", i+1))
@@ -157,6 +162,11 @@ func TestHosted(t *testing.T) {
 		})
 
 		log.Printf("Tenant Rancher %d https://%s", tenantIndex, tenantConfig.RancherURL)
+	}
+
+	log.Printf("Host Rancher https://%s", hostConfig.RancherURL)
+	for i, tenantConfig := range tenantConfigs {
+		log.Printf("Tenant Rancher %d https://%s", i+1, tenantConfig.RancherURL)
 	}
 }
 
@@ -287,22 +297,11 @@ func TestHostCleanup(t *testing.T) {
 
 	filePaths := []string{
 		"../../host.yml",
-		"../../tenant.yml",
 		"../modules/helm/host/.terraform.lock.hcl",
 		"../modules/helm/host/" + tfState,
 		"../modules/helm/host/" + tfStateBackup,
 		"../modules/helm/host/" + tfVars,
 		"../modules/helm/host/upgrade.tfvars",
-		"../modules/helm/tenant/.terraform.lock.hcl",
-		"../modules/helm/tenant/" + tfState,
-		"../modules/helm/tenant/" + tfStateBackup,
-		"../modules/helm/tenant/" + tfVars,
-		"../modules/helm/tenant/upgrade.tfvars",
-		"../modules/kubectl/.terraform.lock.hcl",
-		"../modules/kubectl/" + tfState,
-		"../modules/kubectl/" + tfStateBackup,
-		"../modules/kubectl/" + tfVars,
-		"../modules/kubectl/" + toolkit.TenantKubeConfig,
 		"../modules/aws/.terraform.lock.hcl",
 		"../modules/aws/" + tfState,
 		"../modules/aws/" + tfStateBackup,
@@ -311,8 +310,6 @@ func TestHostCleanup(t *testing.T) {
 
 	folderPaths := []string{
 		"../modules/helm/host/.terraform",
-		"../modules/helm/tenant/.terraform",
-		"../modules/kubectl/.terraform",
 		"../modules/aws/.terraform",
 	}
 
@@ -424,6 +421,31 @@ func deleteS3Object(bucket string, item string) error {
 	})
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func validatedRancherInstanceCount() error {
+
+	minRancherInstances := 2
+	maxRancherInstances := 4
+	viper.AddConfigPath("../../")
+	viper.SetConfigName("config")
+	viper.SetConfigType("yml")
+	err := viper.ReadInConfig()
+	if err != nil {
+		return fmt.Errorf("error reading config: %v", err)
+	}
+
+	totalRancherInstances := viper.GetInt("total_rancher_instances")
+
+	if totalRancherInstances > maxRancherInstances {
+		return fmt.Errorf("can not creaet more than %v rancher instances", maxRancherInstances)
+	}
+
+	if totalRancherInstances < minRancherInstances {
+		return fmt.Errorf("must have at least %v rancher instances", minRancherInstances)
 	}
 
 	return nil

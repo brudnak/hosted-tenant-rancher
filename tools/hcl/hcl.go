@@ -139,7 +139,7 @@ func GenerateAWSMainTF(tenantInstances int) error {
 
 func CleanupTerraformConfig() error {
 
-	tenantInstances := viper.GetInt("tenant_instances")
+	tenantInstances := viper.GetInt("total_rancher_instances")
 	for i := 0; i < tenantInstances; i++ {
 		tenantIndex := i + 1
 		kubectlDir := fmt.Sprintf("../modules/kubectl/tenant-%d", tenantIndex)

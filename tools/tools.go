@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"time"
 
@@ -387,8 +388,7 @@ func (t *Tools) RemoveFolder(folderPath string) error {
 	return nil
 }
 
-func (t *Tools) CreateImport(url string, token string) {
-
+func (t *Tools) CreateImport(url string, token string, tenantIndex int) {
 	impPay := ImportPayload{
 		Type: "provisioning.cattle.io.cluster",
 		Metadata: struct {
@@ -396,7 +396,7 @@ func (t *Tools) CreateImport(url string, token string) {
 			Name      string `json:"name"`
 		}{
 			Namespace: "fleet-default",
-			Name:      "imported-tenant",
+			Name:      fmt.Sprintf("imported-tenant-%d", tenantIndex),
 		},
 		Spec: struct{}{},
 	}
@@ -431,13 +431,16 @@ func (t *Tools) CreateImport(url string, token string) {
 			log.Println(err)
 		}
 	}(response.Body)
+
+	fmt.Println(response)
 }
 
-func (t *Tools) GetManifestUrl(url string, token string) string {
-
+func (t *Tools) GetManifestUrl(url string, token string, tenantIndex int) string {
 	client := &http.Client{
 		Timeout: time.Second * 10,
 	}
+
+	fmt.Println(tenantIndex)
 
 	registrationUrl := fmt.Sprintf("https://%s/v3/clusterregistrationtokens", url)
 	req, err := http.NewRequest("GET", registrationUrl, nil)
@@ -473,7 +476,44 @@ func (t *Tools) GetManifestUrl(url string, token string) string {
 		log.Println(err)
 	}
 
-	return regResponse.Data[0].ManifestURL
+	err = json.Unmarshal(registrationBytes, &regResponse)
+	if err != nil {
+		log.Println(err)
+	}
+
+	// Create a new slice to store the sorted data
+	sortedData := make([]struct {
+		ID          string `json:"id"`
+		Type        string `json:"type"`
+		ManifestURL string `json:"manifestUrl"`
+		CreatedTS   int64  `json:"createdTS"`
+	}, len(regResponse.Data))
+
+	// Copy the relevant fields from regResponse.Data to sortedData
+	for i, item := range regResponse.Data {
+		sortedData[i] = struct {
+			ID          string `json:"id"`
+			Type        string `json:"type"`
+			ManifestURL string `json:"manifestUrl"`
+			CreatedTS   int64  `json:"createdTS"`
+		}{
+			ID:          item.ID,
+			Type:        item.Type,
+			ManifestURL: item.ManifestURL,
+			CreatedTS:   item.CreatedTS,
+		}
+	}
+
+	// Sort the new slice based on the CreatedTS field in descending order
+	sort.Slice(sortedData, func(i, j int) bool {
+		return sortedData[i].CreatedTS > sortedData[j].CreatedTS
+	})
+
+	if len(sortedData) > 0 {
+		return sortedData[0].ManifestURL
+	}
+
+	return ""
 }
 
 func (t *Tools) CallBashScript(serverUrl, rancherToken string) error {
@@ -496,15 +536,24 @@ func (t *Tools) CallBashScript(serverUrl, rancherToken string) error {
 	return err
 }
 
-func (t *Tools) SetupImport(url string, token string, ip string, tenantIndex int) {
+func (t *Tools) SetupImport(url string, password string, ip string, tenantIndex int) {
+	adminToken, err := t.CreateToken(url, password)
+	if err != nil {
+		e := fmt.Errorf("error creating token: %v", err)
+		e.Error()
+	}
 
-	t.CreateImport(url, token)
-	time.Sleep(4 * time.Minute)
+	time.Sleep(time.Second * 10)
+	t.CreateImport(url, adminToken, tenantIndex)
 
-	manifestUrl := t.GetManifestUrl(url, token)
+	manifestUrl := t.GetManifestUrl(url, adminToken, tenantIndex)
+	if manifestUrl == "" {
+		log.Fatal("error from tools.go > SetupImport > manifestUrl is empty")
+	}
+
 	hcl.GenerateKubectlTfVar(ip, manifestUrl, tenantIndex)
 	tenantKubeConfigPath := fmt.Sprintf("../modules/kubectl/tenant-%d/tenant_kube_config.yml", tenantIndex)
-	err := os.Setenv("KUBECONFIG", tenantKubeConfigPath)
+	err = os.Setenv("KUBECONFIG", tenantKubeConfigPath)
 	if err != nil {
 		fmt.Println("error setup import:", err)
 		return
