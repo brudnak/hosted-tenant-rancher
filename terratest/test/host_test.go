@@ -223,8 +223,8 @@ func TestSetupImport(t *testing.T) {
 }
 
 func TestInstallTenantRancher(t *testing.T) {
+	time.Sleep(120 * time.Second)
 	tenantIndex := currentTenantIndex
-
 	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
 		TerraformDir: fmt.Sprintf("../modules/helm/tenant-%d", tenantIndex),
 		NoColor:      true,

@@ -537,7 +537,7 @@ func (t *Tools) SetupImport(url string, tkn string, ip string, tenantIndex int) 
 		log.Fatalf("error creating import: %v", err)
 	}
 
-	time.Sleep(time.Minute * 5)
+	time.Sleep(time.Second * 30)
 	manifestUrl := t.GetManifestUrl(url, tkn)
 	if manifestUrl == "" {
 		log.Fatal("error from tools.go > SetupImport > manifestUrl is empty")
