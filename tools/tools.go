@@ -23,7 +23,6 @@ import (
 
 const (
 	randomStringSource = "abcdefghijklmnopqrstuvwxyz"
-	TenantKubeConfig   = "tenant_kube_config.yml"
 )
 
 type Tools struct{}
@@ -530,21 +529,16 @@ func (t *Tools) CallBashScript(serverUrl, rancherToken string) error {
 	return err
 }
 
-func (t *Tools) SetupImport(url string, password string, ip string, tenantIndex int) {
-	adminToken, err := t.CreateToken(url, password)
-	if err != nil {
-		e := fmt.Errorf("error creating token: %v", err)
-		e.Error()
-	}
+func (t *Tools) SetupImport(url string, tkn string, ip string, tenantIndex int) {
 
 	time.Sleep(time.Second * 30)
-	err = t.CreateImport(url, adminToken, tenantIndex)
+	err := t.CreateImport(url, tkn, tenantIndex)
 	if err != nil {
 		log.Fatalf("error creating import: %v", err)
 	}
 
 	time.Sleep(time.Minute * 5)
-	manifestUrl := t.GetManifestUrl(url, adminToken)
+	manifestUrl := t.GetManifestUrl(url, tkn)
 	if manifestUrl == "" {
 		log.Fatal("error from tools.go > SetupImport > manifestUrl is empty")
 	}

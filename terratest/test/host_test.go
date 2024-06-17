@@ -202,10 +202,11 @@ func TestUpgradeHostRancher(t *testing.T) {
 }
 
 func TestSetupImport(t *testing.T) {
+
 	tenantIndex := currentTenantIndex
 	configIp := configIps[tenantIndex-1]
 
-	time.Sleep(3 * time.Minute)
+	time.Sleep(120 * time.Second)
 	tools.SetupImport(hostUrl, adminToken, configIp, tenantIndex)
 
 	tenantKubeConfigPath := fmt.Sprintf("../modules/kubectl/tenant-%d/tenant_kube_config.yml", tenantIndex)
