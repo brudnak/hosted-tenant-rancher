@@ -318,3 +318,5 @@ host.yml
 tenant.yml
 tenant_kube_config.yml
 upgrade.tfvars
+terratest/modules/helm/tenant-*
+terratest/modules/kubectl/tenant-*

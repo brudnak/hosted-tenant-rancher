@@ -8,11 +8,13 @@ import (
 	"github.com/brudnak/hosted-tenant-rancher/tools/hcl"
 	"golang.org/x/crypto/ssh"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"time"
 
@@ -21,7 +23,6 @@ import (
 
 const (
 	randomStringSource = "abcdefghijklmnopqrstuvwxyz"
-	TenantKubeConfig   = "tenant_kube_config.yml"
 )
 
 type Tools struct{}
@@ -146,8 +147,7 @@ func (t *Tools) K3SHostInstall(config K3SConfig) string {
 	return configIP
 }
 
-func (t *Tools) K3STenantInstall(config K3SConfig) string {
-
+func (t *Tools) K3STenantInstall(config K3SConfig, tenantIndex int) string {
 	k3sVersion := viper.GetString("k3s.version")
 
 	nodeOneCommand := nodeCommandBuilder(k3sVersion, "SECRET", config.DBPassword, config.DBEndpoint, config.RancherURL, config.Node1IP)
@@ -190,18 +190,22 @@ func (t *Tools) K3STenantInstall(config K3SConfig) string {
 	configIP := fmt.Sprintf("https://%s:6443", config.Node1IP)
 	output := bytes.Replace(kubeConf, []byte("https://127.0.0.1:6443"), []byte(configIP), -1)
 
-	err = os.WriteFile("../../tenant.yml", output, 0644)
+	// Write the tenant kubeconfig to the kubectl/tenant-<index> folder
+	kubectlTenantKubeConfigPath := fmt.Sprintf("../modules/kubectl/tenant-%d/tenant_kube_config.yml", tenantIndex)
+	err = os.WriteFile(kubectlTenantKubeConfigPath, output, 0644)
 	if err != nil {
-		log.Println("failed creating tenant config:", err)
+		log.Printf("failed creating tenant kubeconfig for kubectl/tenant-%d: %v", tenantIndex, err)
 	}
 
-	err = os.WriteFile("../../terratest/modules/kubectl/"+TenantKubeConfig, output, 0644)
+	// Write the tenant kubeconfig to the helm/tenant-<index> folder
+	helmTenantKubeConfigPath := fmt.Sprintf("../modules/helm/tenant-%d/tenant_kube_config.yml", tenantIndex)
+	err = os.WriteFile(helmTenantKubeConfigPath, output, 0644)
 	if err != nil {
-		log.Println("failed creating tenant config:", err)
+		log.Printf("failed creating tenant kubeconfig for helm/tenant-%d: %v", tenantIndex, err)
 	}
 
 	// Initial terraform variable file
-	initialFilePath := "../modules/helm/tenant/terraform.tfvars"
+	initialFilePath := fmt.Sprintf("../modules/helm/tenant-%d/terraform.tfvars", tenantIndex)
 	hcl.RancherHelm(
 		config.RancherURL,
 		viper.GetString("rancher.repository_url"),
@@ -215,7 +219,7 @@ func (t *Tools) K3STenantInstall(config K3SConfig) string {
 		viper.GetString("rancher.extra_env_value"))
 
 	// Upgrade terraform variable file
-	upgradeFilePath := "../modules/helm/tenant/upgrade.tfvars"
+	upgradeFilePath := fmt.Sprintf("../modules/helm/tenant-%d/upgrade.tfvars", tenantIndex)
 	hcl.RancherHelm(
 		config.RancherURL,
 		viper.GetString("rancher.repository_url"),
@@ -227,6 +231,7 @@ func (t *Tools) K3STenantInstall(config K3SConfig) string {
 		viper.GetBool("rancher.psp_enabled"),
 		viper.GetString("upgrade.extra_env_name"),
 		viper.GetString("upgrade.extra_env_value"))
+
 	return configIP
 }
 
@@ -382,8 +387,7 @@ func (t *Tools) RemoveFolder(folderPath string) error {
 	return nil
 }
 
-func (t *Tools) CreateImport(url string, token string) {
-
+func (t *Tools) CreateImport(url string, token string, tenantIndex int) error {
 	impPay := ImportPayload{
 		Type: "provisioning.cattle.io.cluster",
 		Metadata: struct {
@@ -391,14 +395,14 @@ func (t *Tools) CreateImport(url string, token string) {
 			Name      string `json:"name"`
 		}{
 			Namespace: "fleet-default",
-			Name:      "imported-tenant",
+			Name:      fmt.Sprintf("imported-tenant-%d", tenantIndex),
 		},
 		Spec: struct{}{},
 	}
 
 	importBody, err := json.Marshal(impPay)
 	if err != nil {
-		log.Println(err)
+		return fmt.Errorf("error marshalling import payload: %v", err)
 	}
 
 	client := &http.Client{
@@ -407,18 +411,15 @@ func (t *Tools) CreateImport(url string, token string) {
 
 	importUrl := fmt.Sprintf("https://%s/v1/provisioning.cattle.io.clusters", url)
 	req, err := http.NewRequest("POST", importUrl, bytes.NewBuffer(importBody))
-
 	if err != nil {
-		log.Println(err)
+		return fmt.Errorf("error setting up http.NewRequest > tools.go > CreateImport: %v", err)
 	}
 
 	bearer := fmt.Sprintf("Bearer %s", token)
-
 	req.Header.Set("Authorization", bearer)
-
 	response, err := client.Do(req)
 	if err != nil {
-		log.Println(err)
+		return fmt.Errorf("error from client.Do > tools.go > CreateImport: %v", err)
 	}
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
@@ -426,10 +427,10 @@ func (t *Tools) CreateImport(url string, token string) {
 			log.Println(err)
 		}
 	}(response.Body)
+	return nil
 }
 
 func (t *Tools) GetManifestUrl(url string, token string) string {
-
 	client := &http.Client{
 		Timeout: time.Second * 10,
 	}
@@ -468,7 +469,44 @@ func (t *Tools) GetManifestUrl(url string, token string) string {
 		log.Println(err)
 	}
 
-	return regResponse.Data[0].ManifestURL
+	err = json.Unmarshal(registrationBytes, &regResponse)
+	if err != nil {
+		log.Println(err)
+	}
+
+	// Create a new slice to store the sorted data
+	sortedData := make([]struct {
+		ID          string `json:"id"`
+		Type        string `json:"type"`
+		ManifestURL string `json:"manifestUrl"`
+		CreatedTS   int64  `json:"createdTS"`
+	}, len(regResponse.Data))
+
+	// Copy the relevant fields from regResponse.Data to sortedData
+	for i, item := range regResponse.Data {
+		sortedData[i] = struct {
+			ID          string `json:"id"`
+			Type        string `json:"type"`
+			ManifestURL string `json:"manifestUrl"`
+			CreatedTS   int64  `json:"createdTS"`
+		}{
+			ID:          item.ID,
+			Type:        item.Type,
+			ManifestURL: item.ManifestURL,
+			CreatedTS:   item.CreatedTS,
+		}
+	}
+
+	// Sort the new slice based on the CreatedTS field in descending order
+	sort.Slice(sortedData, func(i, j int) bool {
+		return sortedData[i].CreatedTS > sortedData[j].CreatedTS
+	})
+
+	if len(sortedData) > 0 {
+		return sortedData[0].ManifestURL
+	}
+
+	return ""
 }
 
 func (t *Tools) CallBashScript(serverUrl, rancherToken string) error {
@@ -491,21 +529,23 @@ func (t *Tools) CallBashScript(serverUrl, rancherToken string) error {
 	return err
 }
 
-func (t *Tools) SetupImport(url string, password string, ip string) {
+func (t *Tools) SetupImport(url string, tkn string, ip string, tenantIndex int) {
 
-	adminToken, err := t.CreateToken(url, password)
+	time.Sleep(time.Second * 30)
+	err := t.CreateImport(url, tkn, tenantIndex)
 	if err != nil {
-		e := fmt.Errorf("error creating token: %v", err)
-		e.Error()
+		log.Fatalf("error creating import: %v", err)
 	}
 
-	t.CreateImport(url, adminToken)
-	// TODO: setup polling mechanism
 	time.Sleep(time.Minute * 5)
-	manifestUrl := t.GetManifestUrl(url, adminToken)
-	hcl.GenerateKubectlTfVar(ip, manifestUrl)
+	manifestUrl := t.GetManifestUrl(url, tkn)
+	if manifestUrl == "" {
+		log.Fatal("error from tools.go > SetupImport > manifestUrl is empty")
+	}
 
-	err = os.Setenv("KUBECONFIG", TenantKubeConfig)
+	hcl.GenerateKubectlTfVar(ip, manifestUrl, tenantIndex)
+	tenantKubeConfigPath := fmt.Sprintf("../modules/kubectl/tenant-%d/tenant_kube_config.yml", tenantIndex)
+	err = os.Setenv("KUBECONFIG", tenantKubeConfigPath)
 	if err != nil {
 		fmt.Println("error setup import:", err)
 		return
@@ -514,4 +554,135 @@ func (t *Tools) SetupImport(url string, password string, ip string) {
 
 func nodeCommandBuilder(version, secret, password, endpoint, url, ip string) string {
 	return fmt.Sprintf(`curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='%s' sh -s - server --token=%s --datastore-endpoint='mysql://tfadmin:%s@tcp(%s)/k3s' --tls-san %s --node-external-ip %s`, version, secret, password, endpoint, url, ip)
+}
+
+func (t *Tools) GenerateHelmTenantConfig(tenantIndex int) error {
+	configContent := `
+terraform {
+  required_providers {
+    helm = {
+      source  = "hashicorp/helm"
+      version = "2.13.2"
+    }
+  }
+}
+
+provider "helm" {
+  kubernetes {
+    config_path = "./tenant_kube_config.yml"
+  }
+}
+
+resource "helm_release" "rancher" {
+  name             = "rancher"
+  repository       = var.repository_url
+  chart            = "rancher"
+  version          = var.rancher_version
+  create_namespace = "true"
+  namespace        = "cattle-system"
+
+  set {
+    name  = "hostname"
+    value = var.rancher_url
+  }
+
+  set {
+    name  = "global.cattle.psp.enabled"
+    value = var.psp_enabled
+  }
+
+  set {
+    name  = "rancherImage"
+    value = var.rancher_image
+  }
+
+  set {
+    name  = "rancherImageTag"
+    value = var.image_tag
+  }
+
+  set {
+    name  = "bootstrapPassword"
+    value = var.bootstrap_password
+  }
+
+  set {
+    name  = "tls"
+    value = "external"
+  }
+
+  set {
+    name  = "extraEnv[0].name"
+    value = var.extra_env_name
+  }
+
+  set {
+    name  = "extraEnv[0].value"
+    value = var.extra_env_value
+  }
+}
+
+variable "rancher_url" {}
+variable "repository_url" {}
+variable "bootstrap_password" {}
+variable "rancher_version" {
+  default = ""
+}
+variable "rancher_image" {
+  default = "rancher/rancher"
+}
+variable "image_tag" {
+  default = ""
+}
+variable "psp_enabled" {
+  default = false
+}
+
+variable "extra_env_name" {
+  description = "Name of the first extra environment variable"
+  type        = string
+  default     = ""
+}
+
+variable "extra_env_value" {
+  description = "Value of the first extra environment variable"
+  type        = string
+  default     = ""
+}
+`
+
+	filePath := fmt.Sprintf("../modules/helm/tenant-%d/main.tf", tenantIndex)
+	err := ioutil.WriteFile(filePath, []byte(configContent), 0644)
+	if err != nil {
+		return fmt.Errorf("failed to write helm tenant config for tenant %d: %v", tenantIndex, err)
+	}
+
+	return nil
+}
+
+func (t *Tools) GenerateKubectlTenantConfig(tenantIndex int) error {
+	configContent := `
+terraform {}
+
+resource "null_resource" "deploy-yaml" {
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
+      export KUBECONFIG=tenant_kube_config.yml
+      kubectl apply -f ${var.manifest_url}
+    EOT
+  }
+}
+
+variable "config_ip" {}
+variable "manifest_url" {}
+`
+
+	filePath := fmt.Sprintf("../modules/kubectl/tenant-%d/main.tf", tenantIndex)
+	err := ioutil.WriteFile(filePath, []byte(configContent), 0644)
+	if err != nil {
+		return fmt.Errorf("failed to write kubectl tenant config for tenant %d: %v", tenantIndex, err)
+	}
+
+	return nil
 }
