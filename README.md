@@ -85,6 +85,7 @@ tf_vars:
   aws_route53_fqdn: # Your Route53 FQDN.
   aws_ec2_instance_type: m5.xlarge
 upgrade:
+  path: tenant-1 # e.g., "host", "tenant-1", "tenant-2"
   version: ""
   image: rancher/rancher
   image_tag: v2.8-head
@@ -96,7 +97,7 @@ upgrade:
 For local testing and upgrade processes, specific functions in `/terratest/test/host_test.go` facilitate the creation and upgrade of hosted and tenant Ranchers. Expect similar time frames (~15 minutes) due to Terraform and AWS operations, primarily for RDS Aurora MySQL database setups.
 
 - **Creation**: Execute `TestCreateHostedTenantRancher` to initiate a hosted Rancher and an imported tenant Rancher setup.
-- **Upgrade**: Run `TestUpgradeHostRancher` and `TestUpgradeTenantRancher` for upgrading existing setups.
+- **Upgrade**: Run `TestUpgradeRancher` for upgrading existing setups. This looks for the variable in the config file under upgrade, path. This is expecting "host", "tenant-1", "tenant-2", etc., etc.
 
 Upon successful execution, URLs for both host and tenant Ranchers will be provided.
 sting and upgrade processes, specific functions in /terratest/test/host_test.go facilitate the creation and upgrade of hosted and tenant Ranchers. Expect similar time frames (~15 minutes) due to Terraform and AWS operations, primarily for RDS Aurora MySQL database setups.

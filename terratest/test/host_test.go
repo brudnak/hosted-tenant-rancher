@@ -182,19 +182,34 @@ func TestInstallHostRancher(t *testing.T) {
 	terraform.InitAndApply(t, terraformOptions)
 }
 
-func TestUpgradeHostRancher(t *testing.T) {
+func TestUpgradeRancher(t *testing.T) {
 
-	cleanupFiles("../modules/helm/host/" + tfVars)
-	originalPath := "../modules/helm/host/upgrade.tfvars"
-	newPath := "../modules/helm/host/" + tfVars
+	viper.AddConfigPath("../../")
+	viper.SetConfigName("config")
+	viper.SetConfigType("yml")
+	err := viper.ReadInConfig()
+	if err != nil {
+		log.Println("error reading config:", err)
+	}
+
+	path := viper.GetString("upgrade.path")
+
+	cleanupPath := fmt.Sprintf("../modules/helm/%s/%s", path, tfVars)
+	cleanupFiles(cleanupPath)
+
+	originalPath := fmt.Sprintf("../modules/helm/%s/upgrade.tfvars", path)
+	newPath := fmt.Sprintf("../modules/helm/%s/%s", path, tfVars)
+
 	e := os.Rename(originalPath, newPath)
 	if e != nil {
 		log.Fatal(e)
 	}
 
+	tfDirPath := fmt.Sprintf("../modules/helm/%s", path)
+
 	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
 
-		TerraformDir: "../modules/helm/host",
+		TerraformDir: tfDirPath,
 		NoColor:      true,
 	})
 
@@ -227,24 +242,6 @@ func TestInstallTenantRancher(t *testing.T) {
 	tenantIndex := currentTenantIndex
 	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
 		TerraformDir: fmt.Sprintf("../modules/helm/tenant-%d", tenantIndex),
-		NoColor:      true,
-	})
-	terraform.InitAndApply(t, terraformOptions)
-}
-
-func TestUpgradeTenantRancher(t *testing.T) {
-
-	cleanupFiles("../modules/helm/tenant/" + tfVars)
-	originalPath := "../modules/helm/tenant/upgrade.tfvars"
-	newPath := "../modules/helm/tenant/" + tfVars
-	e := os.Rename(originalPath, newPath)
-	if e != nil {
-		log.Fatal(e)
-	}
-
-	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
-
-		TerraformDir: "../modules/helm/tenant",
 		NoColor:      true,
 	})
 	terraform.InitAndApply(t, terraformOptions)
