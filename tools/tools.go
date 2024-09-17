@@ -128,8 +128,10 @@ func (t *Tools) K3SHostInstall(config K3SConfig) string {
 		viper.GetString("rancher.image_tag"),
 		initialFilePath,
 		viper.GetBool("rancher.psp_enabled"),
-		viper.GetString("rancher.extra_env_name"),
-		viper.GetString("rancher.extra_env_value"))
+		viper.GetString("rancher.env_name_0"),
+		viper.GetString("rancher.env_value_0"),
+		viper.GetString("rancher.env_name_1"),
+		viper.GetString("rancher.env_value_1"))
 
 	// Upgrade terraform variable file
 	upgradeFilePath := "../modules/helm/host/upgrade.tfvars"
@@ -142,8 +144,10 @@ func (t *Tools) K3SHostInstall(config K3SConfig) string {
 		viper.GetString("upgrade.image_tag"),
 		upgradeFilePath,
 		viper.GetBool("rancher.psp_enabled"),
-		viper.GetString("upgrade.extra_env_name"),
-		viper.GetString("upgrade.extra_env_value"))
+		viper.GetString("rancher.env_name_0"),
+		viper.GetString("rancher.env_value_0"),
+		viper.GetString("rancher.env_name_1"),
+		viper.GetString("rancher.env_value_1"))
 	return configIP
 }
 
@@ -215,8 +219,10 @@ func (t *Tools) K3STenantInstall(config K3SConfig, tenantIndex int) string {
 		viper.GetString("rancher.image_tag"),
 		initialFilePath,
 		viper.GetBool("rancher.psp_enabled"),
-		viper.GetString("rancher.extra_env_name"),
-		viper.GetString("rancher.extra_env_value"))
+		viper.GetString("rancher.env_name_0"),
+		viper.GetString("rancher.env_value_0"),
+		viper.GetString("rancher.env_name_1"),
+		viper.GetString("rancher.env_value_1"))
 
 	// Upgrade terraform variable file
 	upgradeFilePath := fmt.Sprintf("../modules/helm/tenant-%d/upgrade.tfvars", tenantIndex)
@@ -229,8 +235,10 @@ func (t *Tools) K3STenantInstall(config K3SConfig, tenantIndex int) string {
 		viper.GetString("upgrade.image_tag"),
 		upgradeFilePath,
 		viper.GetBool("rancher.psp_enabled"),
-		viper.GetString("upgrade.extra_env_name"),
-		viper.GetString("upgrade.extra_env_value"))
+		viper.GetString("rancher.env_name_0"),
+		viper.GetString("rancher.env_value_0"),
+		viper.GetString("rancher.env_name_1"),
+		viper.GetString("rancher.env_value_1"))
 
 	return configIP
 }

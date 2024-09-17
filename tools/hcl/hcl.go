@@ -212,7 +212,7 @@ func GenerateKubectlTfVar(configIp string, manifestUrl string, tenantIndex int) 
 	}
 }
 
-func RancherHelm(url, repositoryUrl, password, rancherVersion, rancherImage, imageTag, filePath string, pspBool bool, extraEnvOneName, extraEnvOneValue string) {
+func RancherHelm(url, repositoryUrl, password, rancherVersion, rancherImage, imageTag, filePath string, pspBool bool, envName0, envValue0, envName1, envValue1 string) {
 	f := hclwrite.NewEmptyFile()
 
 	tfVarsFile, err := os.Create(filePath)
@@ -233,9 +233,14 @@ func RancherHelm(url, repositoryUrl, password, rancherVersion, rancherImage, ima
 		rootBody.SetAttributeValue("psp_enabled", cty.BoolVal(pspBool))
 	}
 
-	if extraEnvOneName != "" && extraEnvOneValue != "" {
-		rootBody.SetAttributeValue("extra_env_name", cty.StringVal(extraEnvOneName))
-		rootBody.SetAttributeValue("extra_env_value", cty.StringVal(extraEnvOneValue))
+	if envName0 != "" && envValue0 != "" {
+		rootBody.SetAttributeValue("env_name_0", cty.StringVal(envName0))
+		rootBody.SetAttributeValue("env_value_0", cty.StringVal(envValue0))
+	}
+
+	if envName1 != "" && envValue1 != "" {
+		rootBody.SetAttributeValue("env_name_1", cty.StringVal(envName1))
+		rootBody.SetAttributeValue("env_value_1", cty.StringVal(envValue1))
 	}
 
 	_, err = tfVarsFile.Write(f.Bytes())

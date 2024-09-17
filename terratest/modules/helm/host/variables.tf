@@ -14,13 +14,25 @@ variable "psp_enabled" {
   default = false
 }
 
-variable "extra_env_name" {
+variable "env_name_0" {
   description = "Name of the first extra environment variable"
   type        = string
   default     = ""
 }
 
-variable "extra_env_value" {
+variable "env_value_0" {
+  description = "Value of the first extra environment variable"
+  type        = string
+  default     = ""
+}
+
+variable "env_name_1" {
+  description = "Name of the first extra environment variable"
+  type        = string
+  default     = ""
+}
+
+variable "env_value_1" {
   description = "Value of the first extra environment variable"
   type        = string
   default     = ""

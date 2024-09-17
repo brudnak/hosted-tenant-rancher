@@ -53,11 +53,21 @@ resource "helm_release" "rancher" {
 
   set {
     name  = "extraEnv[0].name"
-    value = var.extra_env_name
+    value = var.env_name_0
   }
 
   set {
     name  = "extraEnv[0].value"
-    value = var.extra_env_value
+    value = var.env_value_0
+  }
+
+  set {
+    name  = "extraEnv[1].name"
+    value = var.env_name_1
+  }
+
+  set {
+    name  = "extraEnv[1].value"
+    value = var.env_value_1
   }
 }
