@@ -31,12 +31,12 @@ Expect the Jenkins job to take approximately 15 minutes, attributed mainly to th
 ### Job Execution Guidelines
 
 - **S3 Bucket Limitation**: Each S3 bucket can only be associated with one hosted/tenant job at a time.
-- **Terraform State File**: Presence of a Terraform state file in the S3 bucket necessitates running a cleanup job before initiating a new one.
+- **Terraform State File**: Presence of a Terraform state file in the S3 bucket necessitated running a cleanup job before initiating a new one.
 - **Multiple Instances**: For simultaneous hosted/tenant setups, use unique S3 bucket names for each and note them for subsequent cleanup.
 
 ### Cleanup Process
 
-Utilize the same `config.yml` for the Hosted/Tenant Cleanup Jenkins Job. This job initializes the state file in the S3 bucket to facilitate the `terraform destroy` command.
+Use the same `config.yml` for the Hosted/Tenant Cleanup Jenkins Job. This job initializes the state file in the S3 bucket to facilitate the `terraform destroy` command.
 
 ## Config File Setup
 
@@ -65,8 +65,10 @@ rancher:
   image: rancher/rancher
   image_tag: v2.8-head
   psp_enabled: false
-  extra_env_name: ""
-  extra_env_value: ""
+  env_name_0: ""
+  env_value_0: ""
+  env_name_1: ""
+  env_value_1: ""
 k3s:
   version: v1.27.8+k3s2
 tf_vars:
@@ -89,8 +91,10 @@ upgrade:
   version: ""
   image: rancher/rancher
   image_tag: v2.8-head
-  extra_env_name: ""
-  extra_env_value: ""
+  env_name_0: ""
+  env_value_0: ""
+  env_name_1: ""
+  env_value_1: ""
 ```
 
 ### Local Execution and Upgrade
