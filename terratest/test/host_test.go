@@ -31,7 +31,7 @@ const (
 	tfStateBackup = "terraform.tfstate.backup"
 )
 
-func TestHosted(t *testing.T) {
+func TestCreateHostedTenantRancher(t *testing.T) {
 
 	err := validatedRancherInstanceCount()
 	if err != nil {
