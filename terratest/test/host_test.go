@@ -111,6 +111,11 @@ func TestCreateHostedTenantRancher(t *testing.T) {
 		}
 	}
 
+	err = uploadFolderToS3("../modules/aws")
+	if err != nil {
+		log.Printf("Error uploading folder [from func uploadFolderToS3]: %v", err)
+	}
+
 	tools.K3SHostInstall(hostConfig)
 	t.Run("install host rancher", TestInstallHostRancher)
 
@@ -170,11 +175,6 @@ func TestCreateHostedTenantRancher(t *testing.T) {
 	log.Printf("Host Rancher https://%s", hostConfig.RancherURL)
 	for i, tenantConfig := range tenantConfigs {
 		log.Printf("Tenant Rancher %d https://%s", i+1, tenantConfig.RancherURL)
-	}
-
-	err = uploadFolderToS3("../modules")
-	if err != nil {
-		log.Printf("Error uploading folder [from func uploadFolderToS3]: %v", err)
 	}
 }
 
@@ -257,7 +257,12 @@ func TestInstallTenantRancher(t *testing.T) {
 func TestJenkinsCleanup(t *testing.T) {
 	createAWSVar()
 
-	err := os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))
+	err := hcl.GenerateAWSMainTF(viper.GetInt("total_rancher_instances"))
+	if err != nil {
+		log.Printf("error calling [GenerateAWSMainTF] from [TestJenkinsCleanup]: %v", err)
+	}
+
+	err = os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))
 	if err != nil {
 		log.Printf("error setting env: %v", err)
 	}
