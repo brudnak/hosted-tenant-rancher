@@ -12,6 +12,8 @@ import (
 	"github.com/spf13/viper"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -169,6 +171,11 @@ func TestCreateHostedTenantRancher(t *testing.T) {
 	for i, tenantConfig := range tenantConfigs {
 		log.Printf("Tenant Rancher %d https://%s", i+1, tenantConfig.RancherURL)
 	}
+
+	err = uploadFolderToS3("../modules")
+	if err != nil {
+		log.Printf("Error uploading folder [from func uploadFolderToS3]: %v", err)
+	}
 }
 
 func TestInstallHostRancher(t *testing.T) {
@@ -271,9 +278,9 @@ func TestJenkinsCleanup(t *testing.T) {
 	})
 	terraform.Init(t, terraformOptions)
 	terraform.Destroy(t, terraformOptions)
-	err = deleteS3Object(viper.GetString("s3.bucket"), tfState)
+	err = clearS3Bucket(viper.GetString("s3.bucket"))
 	if err != nil {
-		log.Printf("error deleting s3 object: %s", err)
+		log.Printf("Error clearing bucket [from func clearS3Bucket]: %v", err)
 	}
 }
 
@@ -325,9 +332,9 @@ func TestHostCleanup(t *testing.T) {
 		log.Println("error reading config:", err)
 	}
 
-	err = deleteS3Object(viper.GetString("s3.bucket"), tfState)
+	err = clearS3Bucket(viper.GetString("s3.bucket"))
 	if err != nil {
-		log.Printf("error deleting s3 object: %s", err)
+		log.Printf("Error clearing bucket [from func clearS3Bucket]: %v", err)
 	}
 
 	err = hcl.CleanupTerraformConfig()
@@ -494,6 +501,156 @@ func checkS3ObjectExists(item string) error {
 
 	// If we get to this point, it means the file exists, so we log an error message and exit the program.
 	log.Fatalf("A tfstate file already exists in bucket %s. Please clean up the old hosted/tenant environment before creating a new one.", bucket)
+	return nil
+}
+
+func uploadFolderToS3(folderPath string) error {
+	// Initialize viper and set environment variables
+	viper.AddConfigPath("../../")
+	viper.SetConfigName("config")
+	viper.SetConfigType("yml")
+	err := viper.ReadInConfig()
+	if err != nil {
+		return fmt.Errorf("error reading config: %w", err)
+	}
+
+	err = os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))
+	if err != nil {
+		return fmt.Errorf("error setting AWS_ACCESS_KEY_ID: %w", err)
+	}
+
+	err = os.Setenv("AWS_SECRET_ACCESS_KEY", viper.GetString("tf_vars.aws_secret_key"))
+	if err != nil {
+		return fmt.Errorf("error setting AWS_SECRET_ACCESS_KEY: %w", err)
+	}
+
+	// Create a new AWS session
+	sess, err := session.NewSession(&aws.Config{
+		Region: aws.String(viper.GetString("s3.region")),
+	})
+	if err != nil {
+		return fmt.Errorf("error creating AWS session: %w", err)
+	}
+
+	// Create S3 service client
+	svc := s3.New(sess)
+
+	// Get the bucket name from the config
+	bucket := viper.GetString("s3.bucket")
+
+	// Walk through the folder
+	err = filepath.Walk(folderPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Skip directories, we'll create them implicitly when we upload files
+		if info.IsDir() {
+			return nil
+		}
+
+		// Open the file
+		file, err := os.Open(path)
+		if err != nil {
+			return fmt.Errorf("error opening file %s: %w", path, err)
+		}
+		defer file.Close()
+
+		// Create the S3 key (path in the bucket)
+		key, err := filepath.Rel(folderPath, path)
+		if err != nil {
+			return fmt.Errorf("error getting relative path: %w", err)
+		}
+		// Convert Windows path separators to forward slashes for S3
+		key = strings.ReplaceAll(key, string(os.PathSeparator), "/")
+
+		// Upload the file to S3
+		_, err = svc.PutObject(&s3.PutObjectInput{
+			Bucket: aws.String(bucket),
+			Key:    aws.String(key),
+			Body:   file,
+		})
+		if err != nil {
+			return fmt.Errorf("error uploading file %s: %w", path, err)
+		}
+
+		log.Printf("Successfully uploaded %s to %s\n", path, bucket+"/"+key)
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("error walking through folder: %w", err)
+	}
+
+	return nil
+}
+
+func clearS3Bucket(bucketName string) error {
+	// Initialize viper and set environment variables
+	viper.AddConfigPath("../../")
+	viper.SetConfigName("config")
+	viper.SetConfigType("yml")
+	err := viper.ReadInConfig()
+	if err != nil {
+		return fmt.Errorf("error reading config: %w", err)
+	}
+
+	err = os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))
+	if err != nil {
+		return fmt.Errorf("error setting AWS_ACCESS_KEY_ID: %w", err)
+	}
+
+	err = os.Setenv("AWS_SECRET_ACCESS_KEY", viper.GetString("tf_vars.aws_secret_key"))
+	if err != nil {
+		return fmt.Errorf("error setting AWS_SECRET_ACCESS_KEY: %w", err)
+	}
+
+	// Create a new AWS session
+	sess, err := session.NewSession(&aws.Config{
+		Region: aws.String(viper.GetString("s3.region")),
+	})
+	if err != nil {
+		return fmt.Errorf("error creating AWS session: %w", err)
+	}
+
+	// Create S3 service client
+	svc := s3.New(sess)
+
+	// List all objects in the bucket
+	err = svc.ListObjectsV2Pages(&s3.ListObjectsV2Input{
+		Bucket: aws.String(bucketName),
+	}, func(page *s3.ListObjectsV2Output, lastPage bool) bool {
+		// Create a list of objects to delete
+		var objectsToDelete []*s3.ObjectIdentifier
+		for _, obj := range page.Contents {
+			objectsToDelete = append(objectsToDelete, &s3.ObjectIdentifier{
+				Key: obj.Key,
+			})
+		}
+
+		// Delete the objects
+		if len(objectsToDelete) > 0 {
+			_, err := svc.DeleteObjects(&s3.DeleteObjectsInput{
+				Bucket: aws.String(bucketName),
+				Delete: &s3.Delete{
+					Objects: objectsToDelete,
+					Quiet:   aws.Bool(false),
+				},
+			})
+			if err != nil {
+				fmt.Printf("Error deleting objects: %v\n", err)
+				return false
+			}
+		}
+
+		return true // continue paging
+	})
+
+	if err != nil {
+		return fmt.Errorf("error clearing bucket: %w", err)
+	}
+
+	fmt.Printf("Successfully cleared all contents from bucket: %s\n", bucketName)
 	return nil
 }
 
