@@ -32,16 +32,20 @@ resource "aws_instance" "aws_instance" {
   vpc_security_group_ids = [var.aws_security_group_id]
   key_name               = var.aws_pem_key_name
 
-  root_block_device {
-    volume_size = 200
+    root_block_device {
+      volume_size = 200
+      tags = {
+        Name = "${random_pet.random_pet.keepers.aws_prefix}-${random_pet.random_pet.id}"
+        DoNotDelete = "True"
+        Owner = "${var.aws_prefix}-terraform"
+      }
+    }
+
     tags = {
       Name = "${random_pet.random_pet.keepers.aws_prefix}-${random_pet.random_pet.id}"
+      DoNotDelete = "True"
+      Owner = "${var.aws_prefix}-terraform"
     }
-  }
-
-  tags = {
-    Name = "${random_pet.random_pet.keepers.aws_prefix}-${random_pet.random_pet.id}"
-  }
 }
 
 resource "aws_lb_target_group" "aws_lb_target_group_80" {

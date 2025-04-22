@@ -33,7 +33,7 @@ const (
 	tfStateBackup = "terraform.tfstate.backup"
 )
 
-func TestCreateHostedTenantRancher(t *testing.T) {
+func TestHosted(t *testing.T) {
 
 	err := validatedRancherInstanceCount()
 	if err != nil {
@@ -178,6 +178,65 @@ func TestCreateHostedTenantRancher(t *testing.T) {
 	}
 }
 
+func TestCleanup(t *testing.T) {
+	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
+		TerraformDir: "../modules/aws",
+		NoColor:      true,
+	})
+
+	createAWSVar()
+	err := os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))
+	if err != nil {
+		log.Printf("error setting env: %v", err)
+	}
+
+	err = os.Setenv("AWS_SECRET_ACCESS_KEY", viper.GetString("tf_vars.aws_secret_key"))
+	if err != nil {
+		log.Printf("error setting env: %v", err)
+	}
+
+	terraform.Destroy(t, terraformOptions)
+
+	filePaths := []string{
+		"../../host.yml",
+		"../modules/helm/host/.terraform.lock.hcl",
+		"../modules/helm/host/" + tfState,
+		"../modules/helm/host/" + tfStateBackup,
+		"../modules/helm/host/" + tfVars,
+		"../modules/helm/host/upgrade.tfvars",
+		"../modules/aws/.terraform.lock.hcl",
+		"../modules/aws/" + tfState,
+		"../modules/aws/" + tfStateBackup,
+		"../modules/aws/" + tfVars,
+	}
+
+	folderPaths := []string{
+		"../modules/helm/host/.terraform",
+		"../modules/aws/.terraform",
+	}
+
+	cleanupFiles(filePaths...)
+	cleanupFolders(folderPaths...)
+	viper.AddConfigPath("../../")
+	viper.SetConfigName("config")
+	viper.SetConfigType("yml")
+
+	err = viper.ReadInConfig()
+	if err != nil {
+		log.Println("error reading config:", err)
+	}
+
+	err = clearS3Bucket(viper.GetString("s3.bucket"))
+	if err != nil {
+		log.Printf("Error clearing bucket [from func clearS3Bucket]: %v", err)
+	}
+
+	err = hcl.CleanupTerraformConfig()
+	if err != nil {
+		log.Printf("error cleaning up main.tf and dirs: %s", err)
+	}
+}
+
 func TestInstallHostRancher(t *testing.T) {
 
 	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
@@ -289,65 +348,6 @@ func TestJenkinsCleanup(t *testing.T) {
 	}
 }
 
-func TestHostCleanup(t *testing.T) {
-	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
-		TerraformDir: "../modules/aws",
-		NoColor:      true,
-	})
-
-	createAWSVar()
-	err := os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))
-	if err != nil {
-		log.Printf("error setting env: %v", err)
-	}
-
-	err = os.Setenv("AWS_SECRET_ACCESS_KEY", viper.GetString("tf_vars.aws_secret_key"))
-	if err != nil {
-		log.Printf("error setting env: %v", err)
-	}
-
-	terraform.Destroy(t, terraformOptions)
-
-	filePaths := []string{
-		"../../host.yml",
-		"../modules/helm/host/.terraform.lock.hcl",
-		"../modules/helm/host/" + tfState,
-		"../modules/helm/host/" + tfStateBackup,
-		"../modules/helm/host/" + tfVars,
-		"../modules/helm/host/upgrade.tfvars",
-		"../modules/aws/.terraform.lock.hcl",
-		"../modules/aws/" + tfState,
-		"../modules/aws/" + tfStateBackup,
-		"../modules/aws/" + tfVars,
-	}
-
-	folderPaths := []string{
-		"../modules/helm/host/.terraform",
-		"../modules/aws/.terraform",
-	}
-
-	cleanupFiles(filePaths...)
-	cleanupFolders(folderPaths...)
-	viper.AddConfigPath("../../")
-	viper.SetConfigName("config")
-	viper.SetConfigType("yml")
-
-	err = viper.ReadInConfig()
-	if err != nil {
-		log.Println("error reading config:", err)
-	}
-
-	err = clearS3Bucket(viper.GetString("s3.bucket"))
-	if err != nil {
-		log.Printf("Error clearing bucket [from func clearS3Bucket]: %v", err)
-	}
-
-	err = hcl.CleanupTerraformConfig()
-	if err != nil {
-		log.Printf("error cleaning up main.tf and dirs: %s", err)
-	}
-}
-
 func cleanupFiles(paths ...string) {
 	for _, path := range paths {
 		err := tools.RemoveFile(path)
@@ -391,52 +391,6 @@ func createAWSVar() {
 		viper.GetString("tf_vars.aws_route53_fqdn"),
 		viper.GetString("tf_vars.aws_ec2_instance_type"),
 	)
-}
-
-// deleteS3Object deletes an object from a specified S3 bucket
-func deleteS3Object(bucket string, item string) error {
-
-	viper.AddConfigPath("../../")
-	viper.SetConfigName("config")
-	viper.SetConfigType("yml")
-	err := viper.ReadInConfig()
-	if err != nil {
-		log.Println("Error reading config")
-		return err
-	}
-
-	err = os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))
-	if err != nil {
-		log.Println("Error setting env")
-		return err
-	}
-
-	err = os.Setenv("AWS_SECRET_ACCESS_KEY", viper.GetString("tf_vars.aws_secret_key"))
-	if err != nil {
-		log.Println("Error setting env")
-		return err
-	}
-
-	sess, _ := session.NewSession(&aws.Config{
-		Region: aws.String(viper.GetString("s3.region"))},
-	)
-
-	svc := s3.New(sess)
-
-	_, err = svc.DeleteObject(&s3.DeleteObjectInput{Bucket: aws.String(bucket), Key: aws.String(item)})
-	if err != nil {
-		return err
-	}
-
-	err = svc.WaitUntilObjectNotExists(&s3.HeadObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(item),
-	})
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func validatedRancherInstanceCount() error {
@@ -537,7 +491,6 @@ func uploadFolderToS3(folderPath string) error {
 		return fmt.Errorf("error creating AWS session: %w", err)
 	}
 
-	// Create S3 service client
 	svc := s3.New(sess)
 
 	// Get the bucket name from the config
@@ -559,7 +512,12 @@ func uploadFolderToS3(folderPath string) error {
 		if err != nil {
 			return fmt.Errorf("error opening file %s: %w", path, err)
 		}
-		defer file.Close()
+		defer func(file *os.File) {
+			err := file.Close()
+			if err != nil {
+
+			}
+		}(file)
 
 		// Create the S3 key (path in the bucket)
 		key, err := filepath.Rel(folderPath, path)
@@ -618,7 +576,6 @@ func clearS3Bucket(bucketName string) error {
 		return fmt.Errorf("error creating AWS session: %w", err)
 	}
 
-	// Create S3 service client
 	svc := s3.New(sess)
 
 	// List all objects in the bucket

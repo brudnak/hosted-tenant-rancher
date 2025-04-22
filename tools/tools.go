@@ -8,7 +8,6 @@ import (
 	"github.com/brudnak/hosted-tenant-rancher/tools/hcl"
 	"golang.org/x/crypto/ssh"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -137,17 +136,17 @@ func (t *Tools) K3SHostInstall(config K3SConfig) string {
 	upgradeFilePath := "../modules/helm/host/upgrade.tfvars"
 	hcl.RancherHelm(
 		config.RancherURL,
-		viper.GetString("rancher.repository_url"),
+		viper.GetString("upgrade.repository_url"),
 		viper.GetString("rancher.bootstrap_password"),
 		viper.GetString("upgrade.version"),
 		viper.GetString("upgrade.image"),
 		viper.GetString("upgrade.image_tag"),
 		upgradeFilePath,
 		viper.GetBool("rancher.psp_enabled"),
-		viper.GetString("rancher.env_name_0"),
-		viper.GetString("rancher.env_value_0"),
-		viper.GetString("rancher.env_name_1"),
-		viper.GetString("rancher.env_value_1"))
+		viper.GetString("upgrade.env_name_0"),
+		viper.GetString("upgrade.env_value_0"),
+		viper.GetString("upgrade.env_name_1"),
+		viper.GetString("upgrade.env_value_1"))
 	return configIP
 }
 
@@ -228,17 +227,17 @@ func (t *Tools) K3STenantInstall(config K3SConfig, tenantIndex int) string {
 	upgradeFilePath := fmt.Sprintf("../modules/helm/tenant-%d/upgrade.tfvars", tenantIndex)
 	hcl.RancherHelm(
 		config.RancherURL,
-		viper.GetString("rancher.repository_url"),
+		viper.GetString("upgrade.repository_url"),
 		viper.GetString("rancher.bootstrap_password"),
 		viper.GetString("upgrade.version"),
 		viper.GetString("upgrade.image"),
 		viper.GetString("upgrade.image_tag"),
 		upgradeFilePath,
 		viper.GetBool("rancher.psp_enabled"),
-		viper.GetString("rancher.env_name_0"),
-		viper.GetString("rancher.env_value_0"),
-		viper.GetString("rancher.env_name_1"),
-		viper.GetString("rancher.env_value_1"))
+		viper.GetString("upgrade.env_name_0"),
+		viper.GetString("upgrade.env_value_0"),
+		viper.GetString("upgrade.env_name_1"),
+		viper.GetString("upgrade.env_value_1"))
 
 	return configIP
 }
@@ -565,6 +564,7 @@ func nodeCommandBuilder(version, secret, password, endpoint, url, ip string) str
 }
 
 func (t *Tools) GenerateHelmTenantConfig(tenantIndex int) error {
+
 	configContent := `
 terraform {
   required_providers {
@@ -621,12 +621,22 @@ resource "helm_release" "rancher" {
 
   set {
     name  = "extraEnv[0].name"
-    value = var.extra_env_name
+    value = var.env_name_0
   }
 
   set {
     name  = "extraEnv[0].value"
-    value = var.extra_env_value
+    value = var.env_value_0
+  }
+
+  set {
+    name  = "extraEnv[1].name"
+    value = var.env_name_1
+  }
+
+  set {
+    name  = "extraEnv[1].value"
+    value = var.env_value_1
   }
 }
 
@@ -646,13 +656,25 @@ variable "psp_enabled" {
   default = false
 }
 
-variable "extra_env_name" {
+variable "env_name_0" {
   description = "Name of the first extra environment variable"
   type        = string
   default     = ""
 }
 
-variable "extra_env_value" {
+variable "env_value_0" {
+  description = "Value of the first extra environment variable"
+  type        = string
+  default     = ""
+}
+
+variable "env_name_1" {
+  description = "Name of the first extra environment variable"
+  type        = string
+  default     = ""
+}
+
+variable "env_value_1" {
   description = "Value of the first extra environment variable"
   type        = string
   default     = ""
@@ -660,7 +682,7 @@ variable "extra_env_value" {
 `
 
 	filePath := fmt.Sprintf("../modules/helm/tenant-%d/main.tf", tenantIndex)
-	err := ioutil.WriteFile(filePath, []byte(configContent), 0644)
+	err := os.WriteFile(filePath, []byte(configContent), 0644)
 	if err != nil {
 		return fmt.Errorf("failed to write helm tenant config for tenant %d: %v", tenantIndex, err)
 	}
@@ -687,7 +709,7 @@ variable "manifest_url" {}
 `
 
 	filePath := fmt.Sprintf("../modules/kubectl/tenant-%d/main.tf", tenantIndex)
-	err := ioutil.WriteFile(filePath, []byte(configContent), 0644)
+	err := os.WriteFile(filePath, []byte(configContent), 0644)
 	if err != nil {
 		return fmt.Errorf("failed to write kubectl tenant config for tenant %d: %v", tenantIndex, err)
 	}
