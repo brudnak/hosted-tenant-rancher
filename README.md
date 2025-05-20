@@ -1,13 +1,13 @@
 # Hosted/Tenant Rancher Guide
 
-This README provides instructions for running and managing Hosted/Tenant Rancher instances through Jenkins, including setup, execution, cleanup, and local testing.
+This README provides instructions for running and managing a Hosted/Tenant Rancher instances.
 
 #### Update: Dynamic Amount of Tenant Ranchers
 
 There is a new field in the `config.yml` file, `total_rancher_instances`,
 which allows you to specify the number of tenant Ranchers to create. 
 
-The default should be two and this will create you:
+The default should be two and this will create:
 
 - One Hosted Rancher
 - One Tenant Rancher
@@ -17,26 +17,16 @@ But if you set this to four `total_rancher_instances: 4` you will get:
 - One Hosted Rancher
 - Three Tenant Ranchers
 
-## Running in Jenkins
-
 ### Prerequisites
 
-- **S3 Bucket**: Ensure you have an S3 bucket exclusively for this purpose. It's a one-time setup, reusable for future runs. A Jenkins cleanup job will handle the Terraform state file deletion in this bucket.
-- **Configuration File**: Prepare a `config.yml` file as per the Config File Setup section below. This file is necessary for Jenkins job configuration.
-
-### Time Estimates
-
-Expect the Jenkins job to take approximately 15 minutes, attributed mainly to the provisioning and deletion of RDS Aurora MySQL databases.
+- **S3 Bucket**: Ensure you have an S3 bucket exclusively for this purpose. It's a one-time setup, reusable for future runs.
+- **Configuration File**: Prepare a `config.yml` file as per the Config File Setup section below.
 
 ### Job Execution Guidelines
 
 - **S3 Bucket Limitation**: Each S3 bucket can only be associated with one hosted/tenant job at a time.
-- **Terraform State File**: Presence of a Terraform state file in the S3 bucket necessitated running a cleanup job before initiating a new one.
-- **Multiple Instances**: For simultaneous hosted/tenant setups, use unique S3 bucket names for each and note them for subsequent cleanup.
-
-### Cleanup Process
-
-Use the same `config.yml` for the Hosted/Tenant Cleanup Jenkins Job. This job initializes the state file in the S3 bucket to facilitate the `terraform destroy` command.
+- **Terraform State File**: Presence of a Terraform state file in the S3 bucket required running a cleanup job before initiating a new one.
+- **Creation**: Execute `TestHost` to initiate a hosted Rancher and an imported tenant Rancher setup.
 
 ## Config File Setup
 
@@ -61,16 +51,16 @@ aws:
 rancher:
   repository_url: https://releases.rancher.com/server-charts/latest
   bootstrap_password: # Desired bootstrap password for Rancher.
-  version: 2.8.1
+  version: 2.11.1
   image: rancher/rancher
-  image_tag: v2.8-head
+  image_tag: v2.11.1
   psp_enabled: false
   env_name_0: ""
   env_value_0: ""
   env_name_1: ""
   env_value_1: ""
 k3s:
-  version: v1.27.8+k3s2
+  version: v1.32.3+k3s1
 tf_vars:
   aws_access_key: # Your AWS Access Key.
   aws_secret_key: # Your AWS Secret Key.
@@ -86,22 +76,4 @@ tf_vars:
   aws_rds_password: # AWS RDS password following the specified criteria.
   aws_route53_fqdn: # Your Route53 FQDN.
   aws_ec2_instance_type: m5.xlarge
-upgrade:
-  path: tenant-1 # e.g., "host", "tenant-1", "tenant-2"
-  version: ""
-  image: rancher/rancher
-  image_tag: v2.8-head
-  env_name_0: ""
-  env_value_0: ""
-  env_name_1: ""
-  env_value_1: ""
 ```
-
-### Local Execution and Upgrade
-For local testing and upgrade processes, specific functions in `/terratest/test/host_test.go` facilitate the creation and upgrade of hosted and tenant Ranchers. Expect similar time frames (~15 minutes) due to Terraform and AWS operations, primarily for RDS Aurora MySQL database setups.
-
-- **Creation**: Execute `TestCreateHostedTenantRancher` to initiate a hosted Rancher and an imported tenant Rancher setup.
-- **Upgrade**: Run `TestUpgradeRancher` for upgrading existing setups. This looks for the variable in the config file under upgrade, path. This is expecting "host", "tenant-1", "tenant-2", etc., etc.
-
-Upon successful execution, URLs for both host and tenant Ranchers will be provided.
-sting and upgrade processes, specific functions in /terratest/test/host_test.go facilitate the creation and upgrade of hosted and tenant Ranchers. Expect similar time frames (~15 minutes) due to Terraform and AWS operations, primarily for RDS Aurora MySQL database setups.

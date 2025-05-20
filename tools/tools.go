@@ -131,22 +131,6 @@ func (t *Tools) K3SHostInstall(config K3SConfig) string {
 		viper.GetString("rancher.env_value_0"),
 		viper.GetString("rancher.env_name_1"),
 		viper.GetString("rancher.env_value_1"))
-
-	// Upgrade terraform variable file
-	upgradeFilePath := "../modules/helm/host/upgrade.tfvars"
-	hcl.RancherHelm(
-		config.RancherURL,
-		viper.GetString("upgrade.repository_url"),
-		viper.GetString("rancher.bootstrap_password"),
-		viper.GetString("upgrade.version"),
-		viper.GetString("upgrade.image"),
-		viper.GetString("upgrade.image_tag"),
-		upgradeFilePath,
-		viper.GetBool("rancher.psp_enabled"),
-		viper.GetString("upgrade.env_name_0"),
-		viper.GetString("upgrade.env_value_0"),
-		viper.GetString("upgrade.env_name_1"),
-		viper.GetString("upgrade.env_value_1"))
 	return configIP
 }
 
@@ -222,23 +206,6 @@ func (t *Tools) K3STenantInstall(config K3SConfig, tenantIndex int) string {
 		viper.GetString("rancher.env_value_0"),
 		viper.GetString("rancher.env_name_1"),
 		viper.GetString("rancher.env_value_1"))
-
-	// Upgrade terraform variable file
-	upgradeFilePath := fmt.Sprintf("../modules/helm/tenant-%d/upgrade.tfvars", tenantIndex)
-	hcl.RancherHelm(
-		config.RancherURL,
-		viper.GetString("upgrade.repository_url"),
-		viper.GetString("rancher.bootstrap_password"),
-		viper.GetString("upgrade.version"),
-		viper.GetString("upgrade.image"),
-		viper.GetString("upgrade.image_tag"),
-		upgradeFilePath,
-		viper.GetBool("rancher.psp_enabled"),
-		viper.GetString("upgrade.env_name_0"),
-		viper.GetString("upgrade.env_value_0"),
-		viper.GetString("upgrade.env_name_1"),
-		viper.GetString("upgrade.env_value_1"))
-
 	return configIP
 }
 
@@ -518,7 +485,7 @@ func (t *Tools) GetManifestUrl(url string, token string) string {
 
 func (t *Tools) CallBashScript(serverUrl, rancherToken string) error {
 
-	cmd := exec.Command("/bin/bash", "./scripts/server-url-update.sh") // Replace with the path to your script
+	cmd := exec.Command("/bin/bash", "./scripts/server-url-update.sh")
 
 	// Set environment variables
 	cmd.Env = append(cmd.Env,

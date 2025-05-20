@@ -248,40 +248,6 @@ func TestInstallHostRancher(t *testing.T) {
 	terraform.InitAndApply(t, terraformOptions)
 }
 
-func TestUpgradeRancher(t *testing.T) {
-
-	viper.AddConfigPath("../../")
-	viper.SetConfigName("config")
-	viper.SetConfigType("yml")
-	err := viper.ReadInConfig()
-	if err != nil {
-		log.Println("error reading config:", err)
-	}
-
-	path := viper.GetString("upgrade.path")
-
-	cleanupPath := fmt.Sprintf("../modules/helm/%s/%s", path, tfVars)
-	cleanupFiles(cleanupPath)
-
-	originalPath := fmt.Sprintf("../modules/helm/%s/upgrade.tfvars", path)
-	newPath := fmt.Sprintf("../modules/helm/%s/%s", path, tfVars)
-
-	e := os.Rename(originalPath, newPath)
-	if e != nil {
-		log.Fatal(e)
-	}
-
-	tfDirPath := fmt.Sprintf("../modules/helm/%s", path)
-
-	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
-
-		TerraformDir: tfDirPath,
-		NoColor:      true,
-	})
-
-	terraform.InitAndApply(t, terraformOptions)
-}
-
 func TestSetupImport(t *testing.T) {
 
 	tenantIndex := currentTenantIndex
@@ -311,41 +277,6 @@ func TestInstallTenantRancher(t *testing.T) {
 		NoColor:      true,
 	})
 	terraform.InitAndApply(t, terraformOptions)
-}
-
-func TestJenkinsCleanup(t *testing.T) {
-	createAWSVar()
-
-	err := hcl.GenerateAWSMainTF(viper.GetInt("total_rancher_instances"))
-	if err != nil {
-		log.Printf("error calling [GenerateAWSMainTF] from [TestJenkinsCleanup]: %v", err)
-	}
-
-	err = os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))
-	if err != nil {
-		log.Printf("error setting env: %v", err)
-	}
-
-	err = os.Setenv("AWS_SECRET_ACCESS_KEY", viper.GetString("tf_vars.aws_secret_key"))
-	if err != nil {
-		log.Printf("error setting env: %v", err)
-	}
-
-	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
-		TerraformDir: "../modules/aws",
-		NoColor:      true,
-		BackendConfig: map[string]interface{}{
-			"bucket": viper.GetString("s3.bucket"),
-			"key":    tfState,
-			"region": viper.GetString("s3.region"),
-		},
-	})
-	terraform.Init(t, terraformOptions)
-	terraform.Destroy(t, terraformOptions)
-	err = clearS3Bucket(viper.GetString("s3.bucket"))
-	if err != nil {
-		log.Printf("Error clearing bucket [from func clearS3Bucket]: %v", err)
-	}
 }
 
 func cleanupFiles(paths ...string) {
