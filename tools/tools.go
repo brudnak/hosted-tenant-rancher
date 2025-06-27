@@ -454,8 +454,6 @@ func (t *Tools) CallBashScript(serverUrl, rancherToken string) error {
 
 func (t *Tools) SetupImport(url string, tkn string, ip string, tenantIndex int) {
 
-	//TODO not needed?
-	//time.Sleep(time.Second * 30)
 	err := t.CreateImport(url, tkn, tenantIndex)
 	if err != nil {
 		log.Fatalf("error creating import: %v", err)

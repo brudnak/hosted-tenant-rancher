@@ -18,12 +18,6 @@ resource "random_pet" "random_pet_rds" {
   separator = ""
 }
 
-provider "aws" {
-  region     = var.aws_region
-  access_key = var.aws_access_key
-  secret_key = var.aws_secret_key
-}
-
 resource "aws_instance" "aws_instance" {
   count                  = 2
   ami                    = var.aws_ami
@@ -117,7 +111,7 @@ resource "aws_rds_cluster" "aws_rds_cluster" {
   engine                  = "aurora-mysql"
   engine_version          = "5.7.mysql_aurora.2.11.1"
   availability_zones      = ["us-east-2a", "us-east-2b", "us-east-2c"]
-  database_name           = "${var.aws_prefix}${random_pet.random_pet_rds.id}"
+  database_name           = "db${random_pet.random_pet_rds.id}"
   master_username         = "tfadmin"
   master_password         = var.aws_rds_password
   backup_retention_period = 5

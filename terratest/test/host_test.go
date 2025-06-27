@@ -39,7 +39,6 @@ const (
 )
 
 func TestHosted(t *testing.T) {
-
 	err := validateArrayCounts()
 	if err != nil {
 		log.Fatal("Error with array validation: ", err)
@@ -62,11 +61,6 @@ func TestHosted(t *testing.T) {
 		log.Printf("error setting env: %v", err)
 	}
 
-	err = hcl.GenerateAWSMainTF(viper.GetInt("total_rancher_instances"))
-	if err != nil {
-		log.Println(err)
-	}
-
 	terraformOptions := &terraform.Options{
 		TerraformDir: "../modules/aws",
 		NoColor:      true,
@@ -75,10 +69,15 @@ func TestHosted(t *testing.T) {
 			"key":    tfState,
 			"region": viper.GetString("s3.region"),
 		},
+		Vars: map[string]interface{}{
+			"total_rancher_instances": viper.GetInt("total_rancher_instances"),
+			// All other variables will come from terraform.tfvars file created by createAWSVar()
+		},
 	}
 
 	terraform.InitAndApply(t, terraformOptions)
 
+	flatOutputs := terraform.OutputMap(t, terraformOptions, "flat_outputs")
 	totalInstances := viper.GetInt("total_rancher_instances")
 	helmCommands := viper.GetStringSlice("rancher.helm_commands")
 	k3sVersions := viper.GetStringSlice("k3s.versions")
@@ -87,11 +86,12 @@ func TestHosted(t *testing.T) {
 	var tenantConfigs []toolkit.K3SConfig
 
 	for i := 0; i < totalInstances; i++ {
-		infraServer1IPAddress := terraform.Output(t, terraformOptions, fmt.Sprintf("infra%d_server1_ip", i+1))
-		infraServer2IPAddress := terraform.Output(t, terraformOptions, fmt.Sprintf("infra%d_server2_ip", i+1))
-		infraMysqlEndpoint := terraform.Output(t, terraformOptions, fmt.Sprintf("infra%d_mysql_endpoint", i+1))
-		infraMysqlPassword := terraform.Output(t, terraformOptions, fmt.Sprintf("infra%d_mysql_password", i+1))
-		infraRancherURL := terraform.Output(t, terraformOptions, fmt.Sprintf("infra%d_rancher_url", i+1))
+		// Access outputs from the flat_outputs map
+		infraServer1IPAddress := flatOutputs[fmt.Sprintf("infra%d_server1_ip", i+1)]
+		infraServer2IPAddress := flatOutputs[fmt.Sprintf("infra%d_server2_ip", i+1)]
+		infraMysqlEndpoint := flatOutputs[fmt.Sprintf("infra%d_mysql_endpoint", i+1)]
+		infraMysqlPassword := flatOutputs[fmt.Sprintf("infra%d_mysql_password", i+1)]
+		infraRancherURL := flatOutputs[fmt.Sprintf("infra%d_rancher_url", i+1)]
 
 		if i == 0 {
 			// Set Host URL
@@ -329,8 +329,6 @@ func TestSetupImport(t *testing.T) {
 	tenantIndex := currentTenantIndex
 	configIp := configIps[tenantIndex-1]
 
-	//TODO not needed?
-	//time.Sleep(120 * time.Second)
 	tools.SetupImport(hostUrl, adminToken, configIp, tenantIndex)
 
 	tenantKubeConfigPath := fmt.Sprintf("../modules/kubectl/tenant-%d/tenant_kube_config.yml", tenantIndex)

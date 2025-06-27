@@ -3,22 +3,6 @@ variable "aws_prefix" {
   description = "The prefix for the resources."
 }
 
-variable "aws_region" {
-  type        = string
-  description = "The region to use."
-  default     = "us-east-2"
-}
-
-variable "aws_access_key" {
-  type        = string
-  description = "The access key to use."
-}
-
-variable "aws_secret_key" {
-  type        = string
-  description = "The secret key to use."
-}
-
 variable "aws_route53_fqdn" {
   type        = string
   description = "The fully qualified domain name to use."
