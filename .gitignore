@@ -320,3 +320,4 @@ tenant_kube_config.yml
 upgrade.tfvars
 terratest/modules/helm/tenant-*
 terratest/modules/kubectl/tenant-*
+terratest/test/*-rancher/

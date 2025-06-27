@@ -83,11 +83,6 @@ func (t *Tools) K3SHostInstall(config K3SConfig) string {
 		log.Println(err)
 	}
 
-	serverKubeConfig, err := t.RunCommand("sudo cat /etc/rancher/k3s/k3s.yaml", config.Node1IP)
-	if err != nil {
-		log.Println(err)
-	}
-
 	// Wait for node one to be ready
 	err = t.WaitForNodeReady(config.Node1IP)
 	if err != nil {
@@ -106,31 +101,7 @@ func (t *Tools) K3SHostInstall(config K3SConfig) string {
 		log.Println("node two is not ready: %w", err)
 	}
 
-	kubeConf := []byte(serverKubeConfig)
-
 	configIP := fmt.Sprintf("https://%s:6443", config.Node1IP)
-	output := bytes.Replace(kubeConf, []byte("https://127.0.0.1:6443"), []byte(configIP), -1)
-
-	err = os.WriteFile("../../host.yml", output, 0644)
-	if err != nil {
-		log.Println("failed creating host config:", err)
-	}
-
-	// Initial terraform variable file
-	initialFilePath := "../modules/helm/host/terraform.tfvars"
-	hcl.RancherHelm(
-		config.RancherURL,
-		viper.GetString("rancher.repository_url"),
-		viper.GetString("rancher.bootstrap_password"),
-		viper.GetString("rancher.version"),
-		viper.GetString("rancher.image"),
-		viper.GetString("rancher.image_tag"),
-		initialFilePath,
-		viper.GetBool("rancher.psp_enabled"),
-		viper.GetString("rancher.env_name_0"),
-		viper.GetString("rancher.env_value_0"),
-		viper.GetString("rancher.env_name_1"),
-		viper.GetString("rancher.env_value_1"))
 	return configIP
 }
 
@@ -184,28 +155,6 @@ func (t *Tools) K3STenantInstall(config K3SConfig, tenantIndex int) string {
 		log.Printf("failed creating tenant kubeconfig for kubectl/tenant-%d: %v", tenantIndex, err)
 	}
 
-	// Write the tenant kubeconfig to the helm/tenant-<index> folder
-	helmTenantKubeConfigPath := fmt.Sprintf("../modules/helm/tenant-%d/tenant_kube_config.yml", tenantIndex)
-	err = os.WriteFile(helmTenantKubeConfigPath, output, 0644)
-	if err != nil {
-		log.Printf("failed creating tenant kubeconfig for helm/tenant-%d: %v", tenantIndex, err)
-	}
-
-	// Initial terraform variable file
-	initialFilePath := fmt.Sprintf("../modules/helm/tenant-%d/terraform.tfvars", tenantIndex)
-	hcl.RancherHelm(
-		config.RancherURL,
-		viper.GetString("rancher.repository_url"),
-		viper.GetString("rancher.bootstrap_password"),
-		viper.GetString("rancher.version"),
-		viper.GetString("rancher.image"),
-		viper.GetString("rancher.image_tag"),
-		initialFilePath,
-		viper.GetBool("rancher.psp_enabled"),
-		viper.GetString("rancher.env_name_0"),
-		viper.GetString("rancher.env_value_0"),
-		viper.GetString("rancher.env_name_1"),
-		viper.GetString("rancher.env_value_1"))
 	return configIP
 }
 
@@ -505,7 +454,8 @@ func (t *Tools) CallBashScript(serverUrl, rancherToken string) error {
 
 func (t *Tools) SetupImport(url string, tkn string, ip string, tenantIndex int) {
 
-	time.Sleep(time.Second * 30)
+	//TODO not needed?
+	//time.Sleep(time.Second * 30)
 	err := t.CreateImport(url, tkn, tenantIndex)
 	if err != nil {
 		log.Fatalf("error creating import: %v", err)
@@ -528,133 +478,6 @@ func (t *Tools) SetupImport(url string, tkn string, ip string, tenantIndex int) 
 
 func nodeCommandBuilder(version, secret, password, endpoint, url, ip string) string {
 	return fmt.Sprintf(`curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='%s' sh -s - server --token=%s --datastore-endpoint='mysql://tfadmin:%s@tcp(%s)/k3s' --tls-san %s --node-external-ip %s`, version, secret, password, endpoint, url, ip)
-}
-
-func (t *Tools) GenerateHelmTenantConfig(tenantIndex int) error {
-
-	configContent := `
-terraform {
-  required_providers {
-    helm = {
-      source  = "hashicorp/helm"
-      version = "2.13.2"
-    }
-  }
-}
-
-provider "helm" {
-  kubernetes {
-    config_path = "./tenant_kube_config.yml"
-  }
-}
-
-resource "helm_release" "rancher" {
-  name             = "rancher"
-  repository       = var.repository_url
-  chart            = "rancher"
-  version          = var.rancher_version
-  create_namespace = "true"
-  namespace        = "cattle-system"
-
-  set {
-    name  = "hostname"
-    value = var.rancher_url
-  }
-
-  set {
-    name  = "global.cattle.psp.enabled"
-    value = var.psp_enabled
-  }
-
-  set {
-    name  = "rancherImage"
-    value = var.rancher_image
-  }
-
-  set {
-    name  = "rancherImageTag"
-    value = var.image_tag
-  }
-
-  set {
-    name  = "bootstrapPassword"
-    value = var.bootstrap_password
-  }
-
-  set {
-    name  = "tls"
-    value = "external"
-  }
-
-  set {
-    name  = "extraEnv[0].name"
-    value = var.env_name_0
-  }
-
-  set {
-    name  = "extraEnv[0].value"
-    value = var.env_value_0
-  }
-
-  set {
-    name  = "extraEnv[1].name"
-    value = var.env_name_1
-  }
-
-  set {
-    name  = "extraEnv[1].value"
-    value = var.env_value_1
-  }
-}
-
-variable "rancher_url" {}
-variable "repository_url" {}
-variable "bootstrap_password" {}
-variable "rancher_version" {
-  default = ""
-}
-variable "rancher_image" {
-  default = "rancher/rancher"
-}
-variable "image_tag" {
-  default = ""
-}
-variable "psp_enabled" {
-  default = false
-}
-
-variable "env_name_0" {
-  description = "Name of the first extra environment variable"
-  type        = string
-  default     = ""
-}
-
-variable "env_value_0" {
-  description = "Value of the first extra environment variable"
-  type        = string
-  default     = ""
-}
-
-variable "env_name_1" {
-  description = "Name of the first extra environment variable"
-  type        = string
-  default     = ""
-}
-
-variable "env_value_1" {
-  description = "Value of the first extra environment variable"
-  type        = string
-  default     = ""
-}
-`
-
-	filePath := fmt.Sprintf("../modules/helm/tenant-%d/main.tf", tenantIndex)
-	err := os.WriteFile(filePath, []byte(configContent), 0644)
-	if err != nil {
-		return fmt.Errorf("failed to write helm tenant config for tenant %d: %v", tenantIndex, err)
-	}
-
-	return nil
 }
 
 func (t *Tools) GenerateKubectlTenantConfig(tenantIndex int) error {
@@ -682,4 +505,44 @@ variable "manifest_url" {}
 	}
 
 	return nil
+}
+
+type LoginPayload struct {
+	Description  string `json:"description"`
+	ResponseType string `json:"responseType"`
+	Username     string `json:"username"`
+	Password     string `json:"password"`
+}
+
+type LoginResponse struct {
+	Token string `json:"token"`
+}
+
+type TokenBody struct {
+	Type        string      `json:"type"`
+	Metadata    interface{} `json:"metadata"`
+	Description string      `json:"description"`
+	TTL         int         `json:"ttl"`
+}
+
+type TokenResponse struct {
+	Token string `json:"token"`
+}
+
+type ImportPayload struct {
+	Type     string `json:"type"`
+	Metadata struct {
+		Namespace string `json:"namespace"`
+		Name      string `json:"name"`
+	} `json:"metadata"`
+	Spec struct{} `json:"spec"`
+}
+
+type RegistrationResponse struct {
+	Data []struct {
+		ID          string `json:"id"`
+		Type        string `json:"type"`
+		ManifestURL string `json:"manifestUrl"`
+		CreatedTS   int64  `json:"createdTS"`
+	} `json:"data"`
 }

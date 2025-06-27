@@ -138,7 +138,6 @@ func GenerateAWSMainTF(tenantInstances int) error {
 }
 
 func CleanupTerraformConfig() error {
-
 	tenantInstances := viper.GetInt("total_rancher_instances")
 	for i := 0; i < tenantInstances; i++ {
 		tenantIndex := i + 1
@@ -204,44 +203,6 @@ func GenerateKubectlTfVar(configIp string, manifestUrl string, tenantIndex int) 
 
 	rootBody.SetAttributeValue("config_ip", cty.StringVal(configIp))
 	rootBody.SetAttributeValue("manifest_url", cty.StringVal(manifestUrl))
-
-	_, err = tfVarsFile.Write(f.Bytes())
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-}
-
-func RancherHelm(url, repositoryUrl, password, rancherVersion, rancherImage, imageTag, filePath string, pspBool bool, envName0, envValue0, envName1, envValue1 string) {
-	f := hclwrite.NewEmptyFile()
-
-	tfVarsFile, err := os.Create(filePath)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	rootBody := f.Body()
-
-	rootBody.SetAttributeValue("rancher_url", cty.StringVal(url))
-	rootBody.SetAttributeValue("repository_url", cty.StringVal(repositoryUrl))
-	rootBody.SetAttributeValue("bootstrap_password", cty.StringVal(password))
-	rootBody.SetAttributeValue("rancher_version", cty.StringVal(rancherVersion))
-	rootBody.SetAttributeValue("rancher_image", cty.StringVal(rancherImage))
-	rootBody.SetAttributeValue("image_tag", cty.StringVal(imageTag))
-	if pspBool == false {
-		rootBody.SetAttributeValue("psp_enabled", cty.BoolVal(pspBool))
-	}
-
-	if envName0 != "" && envValue0 != "" {
-		rootBody.SetAttributeValue("env_name_0", cty.StringVal(envName0))
-		rootBody.SetAttributeValue("env_value_0", cty.StringVal(envValue0))
-	}
-
-	if envName1 != "" && envValue1 != "" {
-		rootBody.SetAttributeValue("env_name_1", cty.StringVal(envName1))
-		rootBody.SetAttributeValue("env_value_1", cty.StringVal(envValue1))
-	}
 
 	_, err = tfVarsFile.Write(f.Bytes())
 	if err != nil {
