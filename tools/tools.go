@@ -5,17 +5,17 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"github.com/brudnak/hosted-tenant-rancher/tools/hcl"
-	"golang.org/x/crypto/ssh"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+
+	"golang.org/x/crypto/ssh"
 
 	"github.com/spf13/viper"
 )
@@ -105,7 +105,7 @@ func (t *Tools) K3SHostInstall(config K3SConfig) string {
 	return configIP
 }
 
-func (t *Tools) K3STenantInstall(config K3SConfig, tenantIndex int) string {
+func (t *Tools) K3STenantInstall(config K3SConfig) string {
 	k3sVersion := viper.GetString("k3s.version")
 
 	nodeOneCommand := nodeCommandBuilder(k3sVersion, "SECRET", config.DBPassword, config.DBEndpoint, config.RancherURL, config.Node1IP)
@@ -116,11 +116,6 @@ func (t *Tools) K3STenantInstall(config K3SConfig, tenantIndex int) string {
 	}
 
 	token, err := t.RunCommand("sudo cat /var/lib/rancher/k3s/server/token", config.Node1IP)
-	if err != nil {
-		log.Println(err)
-	}
-
-	serverKubeConfig, err := t.RunCommand("sudo cat /etc/rancher/k3s/k3s.yaml", config.Node1IP)
 	if err != nil {
 		log.Println(err)
 	}
@@ -143,17 +138,7 @@ func (t *Tools) K3STenantInstall(config K3SConfig, tenantIndex int) string {
 		log.Println("node two is not ready: %w", err)
 	}
 
-	kubeConf := []byte(serverKubeConfig)
-
 	configIP := fmt.Sprintf("https://%s:6443", config.Node1IP)
-	output := bytes.Replace(kubeConf, []byte("https://127.0.0.1:6443"), []byte(configIP), -1)
-
-	// Write the tenant kubeconfig to the kubectl/tenant-<index> folder
-	kubectlTenantKubeConfigPath := fmt.Sprintf("../modules/kubectl/tenant-%d/tenant_kube_config.yml", tenantIndex)
-	err = os.WriteFile(kubectlTenantKubeConfigPath, output, 0644)
-	if err != nil {
-		log.Printf("failed creating tenant kubeconfig for kubectl/tenant-%d: %v", tenantIndex, err)
-	}
 
 	return configIP
 }
@@ -284,14 +269,6 @@ func (t *Tools) RunCommand(cmd string, pubIP string) (string, error) {
 	stringOut = strings.TrimRight(stringOut, "\r\n")
 
 	return stringOut, nil
-}
-
-func (t *Tools) CheckIPAddress(ip string) string {
-	if net.ParseIP(ip) == nil {
-		return "invalid"
-	} else {
-		return "valid"
-	}
 }
 
 func (t *Tools) RemoveFile(filePath string) error {
@@ -452,7 +429,7 @@ func (t *Tools) CallBashScript(serverUrl, rancherToken string) error {
 	return err
 }
 
-func (t *Tools) SetupImport(url string, tkn string, ip string, tenantIndex int) {
+func (t *Tools) SetupImport(url string, tkn string, tenantIndex int) {
 
 	err := t.CreateImport(url, tkn, tenantIndex)
 	if err != nil {
@@ -465,12 +442,14 @@ func (t *Tools) SetupImport(url string, tkn string, ip string, tenantIndex int) 
 		log.Fatal("error from tools.go > SetupImport > manifestUrl is empty")
 	}
 
-	hcl.GenerateKubectlTfVar(ip, manifestUrl, tenantIndex)
-	tenantKubeConfigPath := fmt.Sprintf("../modules/kubectl/tenant-%d/tenant_kube_config.yml", tenantIndex)
-	err = os.Setenv("KUBECONFIG", tenantKubeConfigPath)
+	err = t.GenerateKubectlImportScript(tenantIndex, manifestUrl)
 	if err != nil {
-		fmt.Println("error setup import:", err)
-		return
+		log.Fatalf("error generating import script: %v", err)
+	}
+
+	err = os.Setenv("MANIFEST_URL", manifestUrl)
+	if err != nil {
+		log.Printf("error setting MANIFEST_URL env var: %v", err)
 	}
 }
 
@@ -478,30 +457,43 @@ func nodeCommandBuilder(version, secret, password, endpoint, url, ip string) str
 	return fmt.Sprintf(`curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='%s' sh -s - server --token=%s --datastore-endpoint='mysql://tfadmin:%s@tcp(%s)/k3s' --tls-san %s --node-external-ip %s`, version, secret, password, endpoint, url, ip)
 }
 
-func (t *Tools) GenerateKubectlTenantConfig(tenantIndex int) error {
-	configContent := `
-terraform {}
+func (t *Tools) GenerateKubectlImportScript(tenantIndex int, manifestUrl string) error {
+	scriptContent := fmt.Sprintf(`#!/bin/bash
+set -e
 
-resource "null_resource" "deploy-yaml" {
-  provisioner "local-exec" {
-    interpreter = ["/bin/bash", "-c"]
-    command     = <<-EOT
-      export KUBECONFIG=tenant_kube_config.yml
-      kubectl apply -f ${var.manifest_url}
-    EOT
-  }
-}
+echo "Importing tenant cluster into host Rancher..."
+echo "Manifest URL: %s"
 
-variable "config_ip" {}
-variable "manifest_url" {}
-`
+# Apply the import manifest
+export KUBECONFIG=kube_config.yaml
+kubectl apply -f "%s" --validate=false --insecure-skip-tls-verify
 
-	filePath := fmt.Sprintf("../modules/kubectl/tenant-%d/main.tf", tenantIndex)
-	err := os.WriteFile(filePath, []byte(configContent), 0644)
+echo "Import manifest applied successfully!"
+`, manifestUrl, manifestUrl)
+
+	// Get current working directory and create absolute path
+	currentDir, err := os.Getwd()
 	if err != nil {
-		return fmt.Errorf("failed to write kubectl tenant config for tenant %d: %v", tenantIndex, err)
+		return fmt.Errorf("failed to get current directory: %w", err)
 	}
 
+	scriptDir := fmt.Sprintf("tenant-%d-rancher", tenantIndex)
+	absScriptDir := filepath.Join(currentDir, scriptDir)
+
+	// Make sure the directory exists
+	err = os.MkdirAll(absScriptDir, os.ModePerm)
+	if err != nil {
+		return fmt.Errorf("failed to create script directory: %w", err)
+	}
+
+	scriptPath := filepath.Join(absScriptDir, "import.sh")
+
+	err = os.WriteFile(scriptPath, []byte(scriptContent), 0755)
+	if err != nil {
+		return fmt.Errorf("failed to write import script for tenant %d: %v", tenantIndex, err)
+	}
+
+	log.Printf("Created import script: %s", scriptPath)
 	return nil
 }
 

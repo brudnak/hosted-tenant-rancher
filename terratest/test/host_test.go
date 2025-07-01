@@ -6,23 +6,26 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log"
+	"net"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	toolkit "github.com/brudnak/hosted-tenant-rancher/tools"
 	"github.com/brudnak/hosted-tenant-rancher/tools/hcl"
-	"github.com/spf13/viper"
-	"log"
-	"net/http"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
-	"testing"
-	"time"
-
 	"github.com/gruntwork-io/terratest/modules/terraform"
+	"github.com/spf13/viper"
 )
 
 var adminToken string
@@ -39,9 +42,17 @@ const (
 )
 
 func TestHosted(t *testing.T) {
-	err := validateArrayCounts()
+
+	// Validate arrays AND helm commands before any infrastructure
+	err := validateArrayCountsWithHelm()
 	if err != nil {
-		log.Fatal("Error with array validation: ", err)
+		log.Fatal("Error with validation: ", err)
+	}
+
+	// Validate current IP matches whitelisted IP for SSH access
+	err = validateCurrentIP()
+	if err != nil {
+		log.Fatal("Error with IP validation: ", err)
 	}
 
 	err = checkS3ObjectExists(tfState)
@@ -184,80 +195,143 @@ func TestHosted(t *testing.T) {
 
 	log.Printf("Host Rancher https://%s is ready for tenant imports", hostConfig.RancherURL)
 
-	// PHASE 1: Install K3S on tenants and import them as plain clusters
+	// PHASE 1: Install K3S on tenants and import them as plain clusters (SEQUENTIAL)
+	log.Printf("Starting Phase 1: K3S installation and tenant imports (sequential)")
+	configIpsMutex := sync.Mutex{}
+
 	for i, tenantConfig := range tenantConfigs {
 		tenantIndex := i + 1
 		k3sVersionIndex := i + 1 // Tenant K3S versions start at index 1
 
-		err := createTenantDirectories(tenantIndex)
-		if err != nil {
-			t.Fatalf("failed to create tenant directories: %v", err)
-		}
+		log.Printf("Starting K3S installation and import for tenant %d", tenantIndex)
 
-		err = tools.GenerateKubectlTenantConfig(tenantIndex)
-		if err != nil {
-			t.Fatalf("failed to generate kubectl tenant config: %v", err)
-		}
-
-		// Install K3S on tenant using tenant-specific K3S version
-		log.Printf("Installing K3S on tenant %d with version: %s", tenantIndex, k3sVersions[k3sVersionIndex])
-		viper.Set("k3s.version", k3sVersions[k3sVersionIndex])
-		tenantIp := tools.K3STenantInstall(tenantConfig, tenantIndex)
-		configIps = append(configIps, tenantIp)
-
-		// Import tenant into host Rancher
-		currentTenantIndex = tenantIndex
-		log.Printf("Importing tenant %d into host Rancher...", tenantIndex)
-		t.Run(fmt.Sprintf("setup rancher import for tenant %d", tenantIndex), func(t *testing.T) {
-			TestSetupImport(t)
+		// Create a subtest for this tenant
+		t.Run(fmt.Sprintf("Tenant%d_Phase1", tenantIndex), func(subT *testing.T) {
+			if err := setupTenantPhase1(subT, tenantIndex, k3sVersionIndex, tenantConfig, k3sVersions, &configIpsMutex); err != nil {
+				t.Fatalf("Tenant %d phase 1 setup failed: %v", tenantIndex, err)
+			}
 		})
 
-		// Wait for imported cluster to be Active in host Rancher
-		log.Printf("Waiting for tenant %d cluster to be Active in host Rancher...", tenantIndex)
-		err = waitForClusterActive(hostUrl, adminToken, tenantIndex, 10*time.Minute)
-		if err != nil {
-			t.Fatalf("Tenant %d cluster failed to become Active: %v", tenantIndex, err)
-		}
-
-		log.Printf("Tenant %d successfully imported and Active in host Rancher", tenantIndex)
+		log.Printf("Tenant %d Phase 1 completed successfully", tenantIndex)
 	}
 
-	// PHASE 2: Install Rancher on each Active tenant using tenant-specific Helm commands
+	log.Printf("All tenants successfully imported and Active in host Rancher")
+
+	// PHASE 2: Install Rancher on each Active tenant using tenant-specific Helm commands (PARALLEL)
+	var phase2WG sync.WaitGroup
+	var phase2Err error
+	var phase2ErrMutex sync.Mutex
+
 	for i, tenantConfig := range tenantConfigs {
+		phase2WG.Add(1)
 		tenantIndex := i + 1
 		helmCommandIndex := i + 1 // Tenant Helm commands start at index 1
 
-		// Create and execute tenant Rancher install script
-		tenantScriptDir := fmt.Sprintf("tenant-%d-rancher", tenantIndex)
-		CreateRancherInstallScript(helmCommands[helmCommandIndex], tenantConfig.RancherURL, tenantScriptDir)
+		go func(tenantIndex, helmCommandIndex int, tenantConfig toolkit.K3SConfig) {
+			defer phase2WG.Done()
 
-		// Save tenant kubeconfig
-		err := saveK3SKubeconfig(tenantConfig.Node1IP, tenantScriptDir)
-		if err != nil {
-			t.Fatalf("Failed to save tenant kubeconfig: %v", err)
-		}
+			log.Printf("Starting Rancher installation for tenant %d", tenantIndex)
 
-		// Execute tenant install script
-		log.Printf("Installing tenant %d Rancher on Active cluster using Helm command %d...", tenantIndex, helmCommandIndex)
-		err = executeInstallScript(tenantScriptDir)
-		if err != nil {
-			t.Fatalf("Failed to execute tenant install script: %v", err)
-		}
+			// Create a subtest for this tenant
+			t.Run(fmt.Sprintf("Tenant%d_Phase2", tenantIndex), func(subT *testing.T) {
+				if err := setupTenantPhase2(subT, tenantIndex, helmCommandIndex, tenantConfig, helmCommands); err != nil {
+					phase2ErrMutex.Lock()
+					phase2Err = fmt.Errorf("tenant %d phase 2 setup failed: %s", tenantIndex, err.Error())
+					phase2ErrMutex.Unlock()
+					subT.Fail()
+				}
+			})
+		}(tenantIndex, helmCommandIndex, tenantConfig)
+	}
 
-		// Wait for tenant Rancher to be stable
-		log.Printf("Waiting for tenant %d Rancher to be stable...", tenantIndex)
-		err = waitForRancherStable(tenantConfig.RancherURL, 8*time.Minute)
-		if err != nil {
-			t.Fatalf("Tenant %d Rancher failed to become stable: %v", tenantIndex, err)
-		}
+	// Wait for all tenant phase 2 setups to complete
+	phase2WG.Wait()
 
-		log.Printf("Tenant Rancher %d https://%s", tenantIndex, tenantConfig.RancherURL)
+	// Check if any errors occurred in phase 2
+	if phase2Err != nil {
+		t.Fatalf("Error during parallel tenant phase 2 setup: %v", phase2Err)
 	}
 
 	log.Printf("Host Rancher https://%s", hostConfig.RancherURL)
 	for i, tenantConfig := range tenantConfigs {
 		log.Printf("Tenant Rancher %d https://%s", i+1, tenantConfig.RancherURL)
 	}
+}
+
+// setupTenantPhase1 handles K3S installation and cluster import for a single tenant
+func setupTenantPhase1(t *testing.T, tenantIndex, k3sVersionIndex int, tenantConfig toolkit.K3SConfig, k3sVersions []string, configIpsMutex *sync.Mutex) error {
+	// Install K3S on tenant using tenant-specific K3S version
+	log.Printf("Installing K3S on tenant %d with version: %s", tenantIndex, k3sVersions[k3sVersionIndex])
+	viper.Set("k3s.version", k3sVersions[k3sVersionIndex])
+	tenantIp := tools.K3STenantInstall(tenantConfig)
+
+	// Thread-safe append to configIps
+	configIpsMutex.Lock()
+	// Ensure configIps slice is large enough
+	for len(configIps) < tenantIndex {
+		configIps = append(configIps, "")
+	}
+	configIps[tenantIndex-1] = tenantIp
+	configIpsMutex.Unlock()
+
+	// Import tenant into host Rancher
+	currentTenantIndex = tenantIndex
+	log.Printf("Importing tenant %d into host Rancher...", tenantIndex)
+
+	// Setup import
+	tools.SetupImport(hostUrl, adminToken, tenantIndex)
+
+	scriptDir := fmt.Sprintf("tenant-%d-rancher", tenantIndex)
+	err := saveK3SKubeconfig(tenantConfig.Node1IP, scriptDir)
+	if err != nil {
+		return fmt.Errorf("failed to save tenant kubeconfig for import: %w", err)
+	}
+
+	// Execute the import script
+	err = executeImportScript(scriptDir)
+	if err != nil {
+		return fmt.Errorf("failed to execute import script: %w", err)
+	}
+
+	// Wait for imported cluster to be Active in host Rancher
+	log.Printf("Waiting for tenant %d cluster to be Active in host Rancher...", tenantIndex)
+	err = waitForClusterActive(hostUrl, adminToken, tenantIndex, 10*time.Minute)
+	if err != nil {
+		return fmt.Errorf("tenant %d cluster failed to become Active: %w", tenantIndex, err)
+	}
+
+	log.Printf("Tenant %d successfully imported and Active in host Rancher", tenantIndex)
+	return nil
+}
+
+// setupTenantPhase2 handles Rancher installation on an active tenant cluster
+func setupTenantPhase2(t *testing.T, tenantIndex, helmCommandIndex int, tenantConfig toolkit.K3SConfig, helmCommands []string) error {
+	// Create and execute tenant Rancher install script
+	tenantScriptDir := fmt.Sprintf("tenant-%d-rancher", tenantIndex)
+	CreateRancherInstallScript(helmCommands[helmCommandIndex], tenantConfig.RancherURL, tenantScriptDir)
+
+	// Save tenant kubeconfig
+	err := saveK3SKubeconfig(tenantConfig.Node1IP, tenantScriptDir)
+	if err != nil {
+		return fmt.Errorf("failed to save tenant kubeconfig: %w", err)
+	}
+
+	// Execute tenant install script
+	log.Printf("Installing tenant %d Rancher on Active cluster using Helm command %d...", tenantIndex, helmCommandIndex)
+	err = executeInstallScript(tenantScriptDir)
+	if err != nil {
+		return fmt.Errorf("failed to execute tenant install script: %w", err)
+	}
+
+	// Wait for tenant Rancher to be stable
+	log.Printf("Waiting for tenant %d Rancher to be stable...", tenantIndex)
+	err = waitForRancherStable(tenantConfig.RancherURL, 8*time.Minute)
+	if err != nil {
+		return fmt.Errorf("tenant %d Rancher failed to become stable: %w", tenantIndex, err)
+	}
+
+	log.Printf("Tenant Rancher %d https://%s", tenantIndex, tenantConfig.RancherURL)
+	return nil
 }
 
 func TestCleanup(t *testing.T) {
@@ -280,7 +354,6 @@ func TestCleanup(t *testing.T) {
 	terraform.Destroy(t, terraformOptions)
 
 	filePaths := []string{
-		"../../host.yml",
 		"../modules/aws/.terraform.lock.hcl",
 		"../modules/aws/" + tfState,
 		"../modules/aws/" + tfStateBackup,
@@ -291,19 +364,9 @@ func TestCleanup(t *testing.T) {
 		"../modules/aws/.terraform",
 	}
 
-	// Clean up script directories
-	scriptDirs := []string{
-		"host-rancher",
-	}
-
-	totalInstances := viper.GetInt("total_rancher_instances")
-	for i := 1; i < totalInstances; i++ {
-		scriptDirs = append(scriptDirs, fmt.Sprintf("tenant-%d-rancher", i))
-	}
-
 	cleanupFiles(filePaths...)
 	cleanupFolders(folderPaths...)
-	cleanupFolders(scriptDirs...)
+	cleanupRancherDirectoriesSafe()
 
 	viper.AddConfigPath("../../")
 	viper.SetConfigName("config")
@@ -327,21 +390,14 @@ func TestCleanup(t *testing.T) {
 
 func TestSetupImport(t *testing.T) {
 	tenantIndex := currentTenantIndex
-	configIp := configIps[tenantIndex-1]
+	tools.SetupImport(hostUrl, adminToken, tenantIndex)
 
-	tools.SetupImport(hostUrl, adminToken, configIp, tenantIndex)
-
-	tenantKubeConfigPath := fmt.Sprintf("../modules/kubectl/tenant-%d/tenant_kube_config.yml", tenantIndex)
-	err := os.Setenv("KUBECONFIG", tenantKubeConfigPath)
+	// Execute the import script instead of running terraform
+	scriptDir := fmt.Sprintf("tenant-%d-rancher", tenantIndex)
+	err := executeImportScript(scriptDir)
 	if err != nil {
-		log.Println("error setting env", err)
+		t.Fatalf("Failed to execute import script: %v", err)
 	}
-
-	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
-		TerraformDir: fmt.Sprintf("../modules/kubectl/tenant-%d", tenantIndex),
-		NoColor:      true,
-	})
-	terraform.InitAndApply(t, terraformOptions)
 }
 
 func validateArrayCounts() error {
@@ -386,13 +442,11 @@ func CreateRancherInstallScript(helmCommand, rancherURL, scriptDir string) {
 	updatedCommand := strings.Replace(helmCommand, "--set hostname=placeholder",
 		fmt.Sprintf("--set hostname=%s", rancherURL), 1)
 
-	// If no hostname placeholder found, add it
-	if !strings.Contains(helmCommand, "--set hostname=") {
-		updatedCommand = strings.TrimSpace(helmCommand) + fmt.Sprintf(" \\\n  --set hostname=%s", rancherURL)
-	}
-
 	installScript := fmt.Sprintf(`#!/bin/bash
 set -e
+
+# Set kubeconfig to use our local file
+export KUBECONFIG=kube_config.yaml
 
 # Verify kubectl connection
 echo "Verifying connection to Kubernetes cluster..."
@@ -496,13 +550,11 @@ func executeInstallScript(scriptDir string) error {
 
 	cmd := exec.Command("bash", scriptPath)
 	cmd.Dir = absScriptDir
-	cmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	log.Printf("Executing: bash %s", scriptPath)
 	log.Printf("Working directory: %s", absScriptDir)
-	log.Printf("KUBECONFIG: %s", kubeconfigPath)
 
 	err = cmd.Run()
 	if err != nil {
@@ -984,19 +1036,199 @@ func clearS3Bucket(bucketName string) error {
 	return nil
 }
 
-func createTenantDirectories(tenantIndex int) error {
-	kubectlDir := fmt.Sprintf("../modules/kubectl/tenant-%d", tenantIndex)
+func writeFile(path string, data []byte) {
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		log.Printf("Failed to write file %s: %v", path, err)
+	}
+}
 
-	err := os.MkdirAll(kubectlDir, os.ModePerm)
+func executeImportScript(scriptDir string) error {
+	// Get current working directory
+	currentDir, err := os.Getwd()
 	if err != nil {
-		return fmt.Errorf("failed to create kubectl directory for tenant %d: %v", tenantIndex, err)
+		return fmt.Errorf("failed to get current directory: %w", err)
+	}
+
+	// Make absolute paths
+	absScriptDir := filepath.Join(currentDir, scriptDir)
+	scriptPath := filepath.Join(absScriptDir, "import.sh")
+	kubeconfigPath := filepath.Join(absScriptDir, "kube_config.yaml")
+
+	// Make sure files exist
+	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+		return fmt.Errorf("import script not found: %s", scriptPath)
+	}
+	if _, err := os.Stat(kubeconfigPath); os.IsNotExist(err) {
+		return fmt.Errorf("kubeconfig not found: %s", kubeconfigPath)
+	}
+
+	cmd := exec.Command("bash", scriptPath)
+	cmd.Dir = absScriptDir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	log.Printf("Executing import script: bash %s", scriptPath)
+	log.Printf("Working directory: %s", absScriptDir)
+
+	err = cmd.Run()
+	if err != nil {
+		return fmt.Errorf("failed to execute import script: %w", err)
+	}
+
+	log.Printf("Successfully executed import script in %s", absScriptDir)
+	return nil
+}
+
+func cleanupRancherDirectoriesSafe() {
+	var scriptDirs []string
+
+	// Check for host-rancher directory
+	if _, err := os.Stat("host-rancher"); err == nil {
+		scriptDirs = append(scriptDirs, "host-rancher")
+	}
+
+	// Find all tenant-*-rancher directories
+	tenantDirs, err := filepath.Glob("tenant-*-rancher")
+	if err != nil {
+		log.Printf("Error finding tenant directories: %v", err)
+	} else {
+		scriptDirs = append(scriptDirs, tenantDirs...)
+	}
+
+	if len(scriptDirs) > 0 {
+		log.Printf("Found script directories to clean up: %v", scriptDirs)
+		cleanupFolders(scriptDirs...)
+	} else {
+		log.Println("No rancher script directories found to clean up")
+	}
+}
+
+// validateArrayCountsWithHelm does array validation plus helm command validation
+func validateArrayCountsWithHelm() error {
+	// First do the existing array validation
+	if err := validateArrayCounts(); err != nil {
+		return err
+	}
+
+	// Then validate helm commands
+	log.Println("🚀 Starting helm command validation...")
+	if err := validateHelmCommands(); err != nil {
+		return fmt.Errorf("helm validation failed: %w", err)
 	}
 
 	return nil
 }
 
-func writeFile(path string, data []byte) {
-	if err := os.WriteFile(path, data, 0644); err != nil {
-		log.Printf("Failed to write file %s: %v", path, err)
+// validateHelmCommands validates all helm commands before infrastructure setup
+func validateHelmCommands() error {
+	helmCommands := viper.GetStringSlice("rancher.helm_commands")
+
+	log.Printf("🔍 Validating %d helm commands...", len(helmCommands))
+
+	for i, helmCommand := range helmCommands {
+		log.Printf("Validating helm command %d...", i+1)
+
+		if err := validateHelmSyntax(helmCommand, i+1); err != nil {
+			return fmt.Errorf("helm command %d failed validation: %w", i+1, err)
+		}
 	}
+
+	log.Printf("✅ All helm commands validated successfully!")
+	return nil
+}
+
+// validateHelmSyntax checks basic helm command structure
+func validateHelmSyntax(helmCommand string, index int) error {
+	log.Printf("  📋 Checking syntax for command %d", index)
+
+	// Check if it's actually a helm command
+	if !strings.Contains(helmCommand, "helm install") && !strings.Contains(helmCommand, "helm upgrade") {
+		return fmt.Errorf("command doesn't appear to be a helm install/upgrade command")
+	}
+
+	// Check for required flags
+	requiredFlags := []string{
+		"--set hostname=",
+		"--set bootstrapPassword=",
+		"--set agentTLSMode=system-store",
+		"--set tls=external",
+	}
+
+	for _, flag := range requiredFlags {
+		if !strings.Contains(helmCommand, flag) {
+			return fmt.Errorf("missing required flag: %s", flag)
+		}
+	}
+
+	// Validate hostname placeholder
+	if strings.Contains(helmCommand, "--set hostname=placeholder") {
+		log.Printf("  ✅ Found hostname placeholder (will be replaced)")
+	} else if strings.Contains(helmCommand, "--set hostname=") {
+		log.Printf("  ✅ Found hostname setting")
+	}
+
+	log.Printf("  ✅ Syntax validation passed for command %d", index)
+	return nil
+}
+
+// validateCurrentIP checks if current public IP matches the whitelisted IP
+func validateCurrentIP() error {
+	log.Println("🌐 Validating current IP address...")
+
+	// Get whitelisted IP from config
+	whitelistedIP := viper.GetString("aws.whitelisted_ip")
+
+	// Get current public IP
+	currentIP, err := getCurrentPublicIP()
+	if err != nil {
+		return fmt.Errorf("failed to get current public IP: %w", err)
+	}
+
+	log.Printf("Current IP: %s", currentIP)
+	log.Printf("Whitelisted IP: %s", whitelistedIP)
+
+	// Compare IPs
+	if currentIP != whitelistedIP {
+		return fmt.Errorf("current IP (%s) does not match whitelisted IP (%s). Please check your VPN connection", currentIP, whitelistedIP)
+	}
+
+	log.Printf("✅ IP validation passed - current IP matches whitelisted IP")
+	return nil
+}
+
+// getCurrentPublicIP gets the current public IP address
+func getCurrentPublicIP() (string, error) {
+	// Try multiple services in case one is down
+	services := []string{
+		"https://ifconfig.me/ip",
+		"https://api.ipify.org",
+		"https://checkip.amazonaws.com",
+		"https://icanhazip.com",
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	for _, service := range services {
+		resp, err := client.Get(service)
+		if err != nil {
+			log.Printf("Failed to get IP from %s: %v", service, err)
+			continue
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == 200 {
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				continue
+			}
+
+			ip := strings.TrimSpace(string(body))
+			// Basic IP validation
+			if net.ParseIP(ip) != nil {
+				return ip, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("failed to get current public IP from any service")
 }

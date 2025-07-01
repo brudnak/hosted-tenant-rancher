@@ -5,8 +5,11 @@ go 1.24.2
 require (
 	github.com/brudnak/hosted-tenant-rancher/tools v0.0.0-20230623190010-d4632af30d9b
 	github.com/gruntwork-io/terratest v0.40.24
-	github.com/spf13/viper v1.14.0
-	github.com/stretchr/testify v1.8.1
+)
+
+require (
+	github.com/spf13/viper v1.14.0 // indirect
+	github.com/stretchr/testify v1.8.1 // indirect
 )
 
 require (

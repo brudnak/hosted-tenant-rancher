@@ -30,27 +30,6 @@ func CleanupTerraformConfig() error {
 	return nil
 }
 
-func GenerateKubectlTfVar(configIp string, manifestUrl string, tenantIndex int) {
-	f := hclwrite.NewEmptyFile()
-
-	tfVarsFile, err := os.Create(fmt.Sprintf("../../terratest/modules/kubectl/tenant-%d/terraform.tfvars", tenantIndex))
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	rootBody := f.Body()
-
-	rootBody.SetAttributeValue("config_ip", cty.StringVal(configIp))
-	rootBody.SetAttributeValue("manifest_url", cty.StringVal(manifestUrl))
-
-	_, err = tfVarsFile.Write(f.Bytes())
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-}
-
 func GenAwsVar(
 	accessKey,
 	secretKey,
