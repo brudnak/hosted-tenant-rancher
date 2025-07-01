@@ -39,6 +39,23 @@ The `config.yml` file now uses **array-based configuration** to support multiple
     Index 2: Tenant 2 Rancher + Tenant 2 K3S
     Index 3: Tenant 3 Rancher + Tenant 3 K3S
 
+## IP Whitelist Validation
+
+The tool includes automatic IP validation to prevent SSH connection failures during infrastructure setup.
+
+### How it works
+- Checks your current public IP address against the configured whitelist IP
+- Validates before any AWS infrastructure is created (fails fast if VPN is off)
+- **Note**: This only validates your local IP - you must manually add your IP to the AWS security group allowlist
+
+### Configuration
+Add your whitelisted IP to your config file:
+
+```yaml
+aws:
+  whitelisted_ip: "123.45.67.89"  # Your public IP that's allowed in AWS security groups
+```
+
 ### Example Configuration
 
 ```yaml
@@ -108,6 +125,7 @@ rancher:
         --version 2.11.1
 
 aws:
+  whitelisted_ip: 123.45.67.89  # Your public IP that's allowed in AWS security groups
   rsa_private_key: |
     -----BEGIN RSA PRIVATE KEY-----
     # Your AWS PEM key contents here
