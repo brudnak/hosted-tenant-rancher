@@ -73,7 +73,8 @@ variable "aws_security_group_id" {
 
 variable "aws_pem_key_name" {
   type        = string
-  description = "Name of the PEM key for SSH access"
+  description = "Optional EC2 key pair name for emergency access"
+  default     = ""
 }
 
 variable "aws_rds_password" {
@@ -108,7 +109,7 @@ module "high-availability-infrastructure" {
   source   = "./modules/k3s-ha"
 
   # Pass variables to the module - no provider needed since root manages it
-  aws_prefix            = "${var.aws_prefix}-${each.key}"  # Make each instance unique
+  aws_prefix            = "${var.aws_prefix}-${each.key}" # Make each instance unique
   aws_vpc               = var.aws_vpc
   aws_subnet_a          = var.aws_subnet_a
   aws_subnet_b          = var.aws_subnet_b

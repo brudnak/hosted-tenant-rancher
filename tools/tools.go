@@ -13,15 +13,28 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
-	"golang.org/x/crypto/ssh"
-
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go/service/ssm"
 	"github.com/spf13/viper"
 )
 
 const (
 	randomStringSource = "abcdefghijklmnopqrstuvwxyz"
+)
+
+var (
+	awsClientsMu sync.Mutex
+	awsSession   *session.Session
+	ec2Client    *ec2.EC2
+	ssmClient    *ssm.SSM
+	instanceIDs  sync.Map
+	ssmOnline    sync.Map
 )
 
 type Tools struct{}
@@ -53,13 +66,11 @@ func (t *Tools) WaitForNodeReady(nodeIP string) error {
 		case <-timeout:
 			return fmt.Errorf("timed out waiting for node to become ready")
 		case <-poll:
-			// Check the K3S service status.
-			nodeStatus, err := t.RunCommand("systemctl is-active k3s", nodeIP)
+			nodeStatus, err := t.RunCommand("sudo systemctl is-active k3s || true", nodeIP)
 			if err != nil {
 				return fmt.Errorf("failed to check node status: %w", err)
 			}
 
-			// If the K3S service is running (i.e., the status is "active"), return nil.
 			if strings.TrimSpace(nodeStatus) == "active" {
 				return nil
 			}
@@ -68,79 +79,11 @@ func (t *Tools) WaitForNodeReady(nodeIP string) error {
 }
 
 func (t *Tools) K3SHostInstall(config K3SConfig) string {
-
-	k3sVersion := viper.GetString("k3s.version")
-
-	nodeOneCommand := nodeCommandBuilder(k3sVersion, "SECRET", config.DBPassword, config.DBEndpoint, config.RancherURL, config.Node1IP)
-
-	_, err := t.RunCommand(nodeOneCommand, config.Node1IP)
-	if err != nil {
-		log.Println(err)
-	}
-
-	token, err := t.RunCommand("sudo cat /var/lib/rancher/k3s/server/token", config.Node1IP)
-	if err != nil {
-		log.Println(err)
-	}
-
-	// Wait for node one to be ready
-	err = t.WaitForNodeReady(config.Node1IP)
-	if err != nil {
-		log.Println("node one is not ready: %w", err)
-	}
-
-	nodeTwoCommand := nodeCommandBuilder(k3sVersion, token, config.DBPassword, config.DBEndpoint, config.RancherURL, config.Node2IP)
-	_, err = t.RunCommand(nodeTwoCommand, config.Node2IP)
-	if err != nil {
-		log.Println(err)
-	}
-
-	// Wait for node two to be ready
-	err = t.WaitForNodeReady(config.Node2IP)
-	if err != nil {
-		log.Println("node two is not ready: %w", err)
-	}
-
-	configIP := fmt.Sprintf("https://%s:6443", config.Node1IP)
-	return configIP
+	return t.installK3SCluster(config)
 }
 
 func (t *Tools) K3STenantInstall(config K3SConfig) string {
-	k3sVersion := viper.GetString("k3s.version")
-
-	nodeOneCommand := nodeCommandBuilder(k3sVersion, "SECRET", config.DBPassword, config.DBEndpoint, config.RancherURL, config.Node1IP)
-
-	_, err := t.RunCommand(nodeOneCommand, config.Node1IP)
-	if err != nil {
-		log.Println(err)
-	}
-
-	token, err := t.RunCommand("sudo cat /var/lib/rancher/k3s/server/token", config.Node1IP)
-	if err != nil {
-		log.Println(err)
-	}
-
-	// Wait for node one to be ready
-	err = t.WaitForNodeReady(config.Node1IP)
-	if err != nil {
-		log.Println("node one is not ready: %w", err)
-	}
-
-	nodeTwoCommand := nodeCommandBuilder(k3sVersion, token, config.DBPassword, config.DBEndpoint, config.RancherURL, config.Node2IP)
-	_, err = t.RunCommand(nodeTwoCommand, config.Node2IP)
-	if err != nil {
-		log.Println(err)
-	}
-
-	// Wait for node two to be ready
-	err = t.WaitForNodeReady(config.Node2IP)
-	if err != nil {
-		log.Println("node two is not ready: %w", err)
-	}
-
-	configIP := fmt.Sprintf("https://%s:6443", config.Node1IP)
-
-	return configIP
+	return t.installK3SCluster(config)
 }
 
 func (t *Tools) CreateToken(url string, password string) (string, error) {
@@ -224,51 +167,207 @@ func (t *Tools) CreateToken(url string, password string) (string, error) {
 }
 
 func (t *Tools) RunCommand(cmd string, pubIP string) (string, error) {
-
-	pemKey := viper.GetString("aws.rsa_private_key")
-
-	dialIP := fmt.Sprintf("%s:22", pubIP)
-
-	signer, err := ssh.ParsePrivateKey([]byte(pemKey))
+	instanceID, err := getInstanceIDFromIP(pubIP)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse private key: %w", err)
+		return "", fmt.Errorf("failed to resolve instance for %s: %w", pubIP, err)
 	}
-	config := &ssh.ClientConfig{
-		User:            "ubuntu",
-		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signer)},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+
+	if err := waitForSSMAgent(instanceID, 5*time.Minute); err != nil {
+		return "", fmt.Errorf("ssm agent not ready for %s (%s): %w", pubIP, instanceID, err)
 	}
-	conn, err := ssh.Dial("tcp", dialIP, config)
+
+	output, err := runCommandSSM(cmd, instanceID)
 	if err != nil {
-		return "", fmt.Errorf("failed to establish ssh connection: %w", err)
+		return "", fmt.Errorf("failed to run command via ssm on %s (%s): %w", pubIP, instanceID, err)
 	}
-	defer func() {
-		if err := conn.Close(); err != nil {
-			log.Println(err)
+
+	return output, nil
+}
+
+func initAWSClients() error {
+	awsClientsMu.Lock()
+	defer awsClientsMu.Unlock()
+
+	if awsSession != nil && ec2Client != nil && ssmClient != nil {
+		return nil
+	}
+
+	cfg := aws.NewConfig().WithRegion(resolveAWSRegion())
+	accessKey := viper.GetString("tf_vars.aws_access_key")
+	secretKey := viper.GetString("tf_vars.aws_secret_key")
+	if accessKey != "" && secretKey != "" {
+		cfg = cfg.WithCredentials(credentials.NewStaticCredentials(
+			accessKey,
+			secretKey,
+			"",
+		))
+	}
+
+	sess, err := session.NewSession(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to initialize aws session: %w", err)
+	}
+
+	awsSession = sess
+	ec2Client = ec2.New(sess)
+	ssmClient = ssm.New(sess)
+
+	return nil
+}
+
+func resolveAWSRegion() string {
+	if region := viper.GetString("tf_vars.aws_region"); region != "" {
+		return region
+	}
+	if region := viper.GetString("s3.region"); region != "" {
+		return region
+	}
+
+	return "us-east-2"
+}
+
+func getInstanceIDFromIP(ip string) (string, error) {
+	if err := initAWSClients(); err != nil {
+		return "", err
+	}
+
+	if cached, ok := instanceIDs.Load(ip); ok {
+		return cached.(string), nil
+	}
+
+	lookupFilters := [][]*ec2.Filter{
+		{
+			{
+				Name:   aws.String("ip-address"),
+				Values: []*string{aws.String(ip)},
+			},
+			{
+				Name:   aws.String("instance-state-name"),
+				Values: []*string{aws.String(ec2.InstanceStateNamePending), aws.String(ec2.InstanceStateNameRunning)},
+			},
+		},
+		{
+			{
+				Name:   aws.String("private-ip-address"),
+				Values: []*string{aws.String(ip)},
+			},
+			{
+				Name:   aws.String("instance-state-name"),
+				Values: []*string{aws.String(ec2.InstanceStateNamePending), aws.String(ec2.InstanceStateNameRunning)},
+			},
+		},
+	}
+
+	for _, filters := range lookupFilters {
+		result, err := ec2Client.DescribeInstances(&ec2.DescribeInstancesInput{Filters: filters})
+		if err != nil {
+			return "", fmt.Errorf("failed describing ec2 instances for %s: %w", ip, err)
 		}
-	}()
 
-	session, err := conn.NewSession()
-	if err != nil {
-		return "", fmt.Errorf("failed to create new ssh session: %w", err)
-	}
-	defer func() {
-		if err := session.Close(); err != nil {
-			log.Println(err)
+		for _, reservation := range result.Reservations {
+			for _, instance := range reservation.Instances {
+				if instance.InstanceId == nil {
+					continue
+				}
+
+				instanceIDs.Store(ip, aws.StringValue(instance.InstanceId))
+				return aws.StringValue(instance.InstanceId), nil
+			}
 		}
-	}()
-
-	var stdoutBuf bytes.Buffer
-	session.Stdout = &stdoutBuf
-	err = session.Run(cmd)
-	if err != nil {
-		return "", fmt.Errorf("failed to run ssh command: %w", err)
 	}
 
-	stringOut := stdoutBuf.String()
-	stringOut = strings.TrimRight(stringOut, "\r\n")
+	return "", fmt.Errorf("no ec2 instance found for ip %s", ip)
+}
 
-	return stringOut, nil
+func waitForSSMAgent(instanceID string, maxWait time.Duration) error {
+	if err := initAWSClients(); err != nil {
+		return err
+	}
+
+	if online, ok := ssmOnline.Load(instanceID); ok && online.(bool) {
+		return nil
+	}
+
+	deadline := time.Now().Add(maxWait)
+	attempt := 0
+
+	for time.Now().Before(deadline) {
+		attempt++
+
+		result, err := ssmClient.DescribeInstanceInformation(&ssm.DescribeInstanceInformationInput{
+			Filters: []*ssm.InstanceInformationStringFilter{
+				{
+					Key:    aws.String("InstanceIds"),
+					Values: []*string{aws.String(instanceID)},
+				},
+			},
+		})
+		if err == nil && len(result.InstanceInformationList) > 0 {
+			status := aws.StringValue(result.InstanceInformationList[0].PingStatus)
+			if status == ssm.PingStatusOnline {
+				ssmOnline.Store(instanceID, true)
+				return nil
+			}
+		}
+
+		if attempt == 1 || attempt%10 == 0 {
+			log.Printf("Waiting for SSM agent on instance %s", instanceID)
+		}
+
+		time.Sleep(3 * time.Second)
+	}
+
+	return fmt.Errorf("timed out after %s", maxWait)
+}
+
+func runCommandSSM(cmd, instanceID string) (string, error) {
+	if err := initAWSClients(); err != nil {
+		return "", err
+	}
+
+	sendOutput, err := ssmClient.SendCommand(&ssm.SendCommandInput{
+		DocumentName: aws.String("AWS-RunShellScript"),
+		InstanceIds:  []*string{aws.String(instanceID)},
+		Parameters: map[string][]*string{
+			"commands": {
+				aws.String("set -e"),
+				aws.String(cmd),
+			},
+		},
+		TimeoutSeconds: aws.Int64(600),
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to send ssm command: %w", err)
+	}
+
+	commandID := aws.StringValue(sendOutput.Command.CommandId)
+	deadline := time.Now().Add(10 * time.Minute)
+
+	for time.Now().Before(deadline) {
+		time.Sleep(5 * time.Second)
+
+		invocation, err := ssmClient.GetCommandInvocation(&ssm.GetCommandInvocationInput{
+			CommandId:  aws.String(commandID),
+			InstanceId: aws.String(instanceID),
+		})
+		if err != nil {
+			continue
+		}
+
+		status := aws.StringValue(invocation.Status)
+		switch status {
+		case ssm.CommandInvocationStatusSuccess:
+			return strings.TrimRight(aws.StringValue(invocation.StandardOutputContent), "\r\n"), nil
+		case ssm.CommandInvocationStatusPending, ssm.CommandInvocationStatusInProgress, "Delayed":
+			continue
+		default:
+			stdout := strings.TrimSpace(aws.StringValue(invocation.StandardOutputContent))
+			stderr := strings.TrimSpace(aws.StringValue(invocation.StandardErrorContent))
+			return "", fmt.Errorf("command status %s\nstdout: %s\nstderr: %s", status, stdout, stderr)
+		}
+	}
+
+	return "", fmt.Errorf("command %s timed out on instance %s", commandID, instanceID)
 }
 
 func (t *Tools) RemoveFile(filePath string) error {
@@ -453,8 +552,200 @@ func (t *Tools) SetupImport(url string, tkn string, tenantIndex int) {
 	}
 }
 
-func nodeCommandBuilder(version, secret, password, endpoint, url, ip string) string {
-	return fmt.Sprintf(`curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION='%s' sh -s - server --token=%s --datastore-endpoint='mysql://tfadmin:%s@tcp(%s)/k3s' --tls-san %s --node-external-ip %s`, version, secret, password, endpoint, url, ip)
+func (t *Tools) installK3SCluster(config K3SConfig) string {
+	k3sVersion := viper.GetString("k3s.version")
+
+	if err := t.prepareK3SNode(config.Node1IP, config, "SECRET", k3sVersion); err != nil {
+		log.Printf("failed preparing first K3s node %s: %v", config.Node1IP, err)
+	}
+
+	if err := t.installK3SServer(config.Node1IP, k3sVersion); err != nil {
+		log.Printf("failed installing K3s on first node %s: %v", config.Node1IP, err)
+	}
+
+	token, err := t.waitForK3SToken(config.Node1IP)
+	if err != nil {
+		log.Printf("failed waiting for first K3s node token on %s: %v", config.Node1IP, err)
+	}
+
+	if err := t.WaitForNodeReady(config.Node1IP); err != nil {
+		log.Printf("first K3s node %s is not ready: %v", config.Node1IP, err)
+		t.logK3SDiagnostics(config.Node1IP)
+	}
+
+	if err := t.prepareK3SNode(config.Node2IP, config, token, k3sVersion); err != nil {
+		log.Printf("failed preparing second K3s node %s: %v", config.Node2IP, err)
+	}
+
+	if err := t.installK3SServer(config.Node2IP, k3sVersion); err != nil {
+		log.Printf("failed installing K3s on second node %s: %v", config.Node2IP, err)
+	}
+
+	if err := t.WaitForNodeReady(config.Node2IP); err != nil {
+		log.Printf("second K3s node %s is not ready: %v", config.Node2IP, err)
+		t.logK3SDiagnostics(config.Node2IP)
+	}
+
+	return fmt.Sprintf("https://%s:6443", config.Node1IP)
+}
+
+func (t *Tools) prepareK3SNode(nodeIP string, config K3SConfig, token, version string) error {
+	if _, err := t.RunCommand("sudo mkdir -p /etc/rancher/k3s /var/lib/rancher/k3s/agent/images", nodeIP); err != nil {
+		return fmt.Errorf("failed creating K3s directories: %w", err)
+	}
+
+	configContent := buildK3SConfigContent(config, token, nodeIP)
+	if err := t.writeRemoteFile(nodeIP, "/etc/rancher/k3s/config.yaml", configContent); err != nil {
+		return fmt.Errorf("failed writing K3s config: %w", err)
+	}
+
+	if err := validateDockerHubConfig(); err != nil {
+		return err
+	}
+
+	dockerHubUser := viper.GetString("dockerhub.username")
+	dockerHubPassword := viper.GetString("dockerhub.password")
+	if dockerHubUser != "" && dockerHubPassword != "" {
+		registriesContent := buildK3SRegistriesContent(dockerHubUser, dockerHubPassword)
+		if err := t.writeRemoteFile(nodeIP, "/etc/rancher/k3s/registries.yaml", registriesContent); err != nil {
+			return fmt.Errorf("failed writing registries config: %w", err)
+		}
+	}
+
+	if !viper.GetBool("k3s.preload_images") {
+		return nil
+	}
+
+	airgapURL := buildK3SAirgapImageURL(version)
+	cmd := fmt.Sprintf(
+		"curl -sfL %s -o /tmp/k3s-airgap-images-amd64.tar.zst && sudo mv /tmp/k3s-airgap-images-amd64.tar.zst /var/lib/rancher/k3s/agent/images/",
+		shellQuote(airgapURL),
+	)
+	if _, err := t.RunCommand(cmd, nodeIP); err != nil {
+		return fmt.Errorf("failed preloading K3s images from %s: %w", airgapURL, err)
+	}
+
+	return nil
+}
+
+func (t *Tools) installK3SServer(nodeIP, version string) error {
+	cmd := fmt.Sprintf(
+		"curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=%s sh -s - server",
+		shellQuote(version),
+	)
+	if _, err := t.RunCommand(cmd, nodeIP); err != nil {
+		t.logK3SDiagnostics(nodeIP)
+		return err
+	}
+
+	return nil
+}
+
+func (t *Tools) waitForK3SToken(nodeIP string) (string, error) {
+	timeout := time.After(5 * time.Minute)
+	poll := time.Tick(10 * time.Second)
+
+	for {
+		select {
+		case <-timeout:
+			t.logK3SDiagnostics(nodeIP)
+			return "", fmt.Errorf("timed out waiting for K3s token on %s", nodeIP)
+		case <-poll:
+			token, err := t.RunCommand("sudo test -s /var/lib/rancher/k3s/server/token && sudo cat /var/lib/rancher/k3s/server/token", nodeIP)
+			if err != nil {
+				continue
+			}
+			token = strings.TrimSpace(token)
+			if token != "" {
+				return token, nil
+			}
+		}
+	}
+}
+
+func (t *Tools) writeRemoteFile(nodeIP, path, content string) error {
+	cmd := fmt.Sprintf("cat <<'EOF' | sudo tee %s >/dev/null\n%s\nEOF", shellQuote(path), content)
+	_, err := t.RunCommand(cmd, nodeIP)
+	return err
+}
+
+func (t *Tools) logK3SDiagnostics(nodeIP string) {
+	commands := []string{
+		"sudo systemctl status k3s --no-pager || true",
+		"sudo journalctl -u k3s --no-pager -n 50 || true",
+	}
+
+	for _, cmd := range commands {
+		output, err := t.RunCommand(cmd, nodeIP)
+		if err != nil {
+			log.Printf("failed collecting diagnostics on %s with %q: %v", nodeIP, cmd, err)
+			continue
+		}
+		log.Printf("K3s diagnostics from %s:\n%s", nodeIP, output)
+	}
+}
+
+func buildK3SConfigContent(config K3SConfig, token, nodeIP string) string {
+	tlsSANs := []string{
+		config.RancherURL,
+		config.Node1IP,
+		config.Node2IP,
+	}
+
+	lines := []string{
+		fmt.Sprintf("token: %s", yamlQuote(token)),
+		fmt.Sprintf("datastore-endpoint: %s", yamlQuote(fmt.Sprintf("mysql://tfadmin:%s@tcp(%s)/k3s", config.DBPassword, config.DBEndpoint))),
+		"tls-san:",
+	}
+
+	for _, san := range tlsSANs {
+		if san == "" {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("  - %s", yamlQuote(san)))
+	}
+
+	lines = append(lines, fmt.Sprintf("node-external-ip: %s", yamlQuote(nodeIP)))
+
+	return strings.Join(lines, "\n")
+}
+
+func buildK3SRegistriesContent(username, password string) string {
+	return strings.Join([]string{
+		"configs:",
+		"  docker.io:",
+		"    auth:",
+		fmt.Sprintf("      username: %s", yamlQuote(username)),
+		fmt.Sprintf("      password: %s", yamlQuote(password)),
+	}, "\n")
+}
+
+func buildK3SAirgapImageURL(version string) string {
+	escapedVersion := strings.ReplaceAll(version, "+", "%2B")
+	return fmt.Sprintf("https://github.com/k3s-io/k3s/releases/download/%s/k3s-airgap-images-amd64.tar.zst", escapedVersion)
+}
+
+func validateDockerHubConfig() error {
+	username := viper.GetString("dockerhub.username")
+	password := viper.GetString("dockerhub.password")
+	if username == "" || password == "" {
+		return fmt.Errorf("dockerhub.username and dockerhub.password are required")
+	}
+
+	return nil
+}
+
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
+}
+
+func yamlQuote(value string) string {
+	quoted, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Sprintf("%q", value)
+	}
+
+	return string(quoted)
 }
 
 func (t *Tools) GenerateKubectlImportScript(tenantIndex int, manifestUrl string) error {

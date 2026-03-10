@@ -6,9 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -41,18 +39,18 @@ const (
 	tfStateBackup = "terraform.tfstate.backup"
 )
 
+var s3UploadExcludedNames = map[string]struct{}{
+	".terraform":               {},
+	"terraform.tfstate":        {},
+	"terraform.tfstate.backup": {},
+}
+
 func TestHosted(t *testing.T) {
 
 	// Validate arrays AND helm commands before any infrastructure
 	err := validateArrayCountsWithHelm()
 	if err != nil {
 		log.Fatal("Error with validation: ", err)
-	}
-
-	// Validate current IP matches whitelisted IP for SSH access
-	err = validateCurrentIP()
-	if err != nil {
-		log.Fatal("Error with IP validation: ", err)
 	}
 
 	err = checkS3ObjectExists(tfState)
@@ -126,11 +124,6 @@ func TestHosted(t *testing.T) {
 			}
 			tenantConfigs = append(tenantConfigs, tenantConfig)
 		}
-	}
-
-	err = uploadFolderToS3("../modules/aws")
-	if err != nil {
-		log.Printf("Error uploading folder [from func uploadFolderToS3]: %v", err)
 	}
 
 	// Install K3S on host using host K3S version (index 0)
@@ -922,6 +915,13 @@ func uploadFolderToS3(folderPath string) error {
 			return err
 		}
 
+		if _, excluded := s3UploadExcludedNames[info.Name()]; excluded {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
 		// Skip directories, we'll create them implicitly when we upload files
 		if info.IsDir() {
 			return nil
@@ -1110,6 +1110,10 @@ func validateArrayCountsWithHelm() error {
 		return err
 	}
 
+	if err := validateDockerHubConfig(); err != nil {
+		return err
+	}
+
 	// Then validate helm commands
 	log.Println("🚀 Starting helm command validation...")
 	if err := validateHelmCommands(); err != nil {
@@ -1134,6 +1138,18 @@ func validateHelmCommands() error {
 	}
 
 	log.Printf("✅ All helm commands validated successfully!")
+	return nil
+}
+
+func validateDockerHubConfig() error {
+	username := strings.TrimSpace(viper.GetString("dockerhub.username"))
+	password := strings.TrimSpace(viper.GetString("dockerhub.password"))
+
+	if username == "" || password == "" {
+		return fmt.Errorf("dockerhub.username and dockerhub.password are required to avoid Docker Hub rate limits during K3s setup")
+	}
+
+	log.Printf("✅ Docker Hub credentials configured for K3s image pulls")
 	return nil
 }
 
@@ -1169,66 +1185,4 @@ func validateHelmSyntax(helmCommand string, index int) error {
 
 	log.Printf("  ✅ Syntax validation passed for command %d", index)
 	return nil
-}
-
-// validateCurrentIP checks if current public IP matches the whitelisted IP
-func validateCurrentIP() error {
-	log.Println("🌐 Validating current IP address...")
-
-	// Get whitelisted IP from config
-	whitelistedIP := viper.GetString("aws.whitelisted_ip")
-
-	// Get current public IP
-	currentIP, err := getCurrentPublicIP()
-	if err != nil {
-		return fmt.Errorf("failed to get current public IP: %w", err)
-	}
-
-	log.Printf("Current IP: %s", currentIP)
-	log.Printf("Whitelisted IP: %s", whitelistedIP)
-
-	// Compare IPs
-	if currentIP != whitelistedIP {
-		return fmt.Errorf("current IP (%s) does not match whitelisted IP (%s). Please check your VPN connection", currentIP, whitelistedIP)
-	}
-
-	log.Printf("✅ IP validation passed - current IP matches whitelisted IP")
-	return nil
-}
-
-// getCurrentPublicIP gets the current public IP address
-func getCurrentPublicIP() (string, error) {
-	// Try multiple services in case one is down
-	services := []string{
-		"https://ifconfig.me/ip",
-		"https://api.ipify.org",
-		"https://checkip.amazonaws.com",
-		"https://icanhazip.com",
-	}
-
-	client := &http.Client{Timeout: 10 * time.Second}
-
-	for _, service := range services {
-		resp, err := client.Get(service)
-		if err != nil {
-			log.Printf("Failed to get IP from %s: %v", service, err)
-			continue
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode == 200 {
-			body, err := io.ReadAll(resp.Body)
-			if err != nil {
-				continue
-			}
-
-			ip := strings.TrimSpace(string(body))
-			// Basic IP validation
-			if net.ParseIP(ip) != nil {
-				return ip, nil
-			}
-		}
-	}
-
-	return "", fmt.Errorf("failed to get current public IP from any service")
 }

@@ -19,7 +19,7 @@ This system creates a **Host Rancher** that manages multiple **Tenant Ranchers**
 ## Prerequisites
 
 - **S3 Bucket**: Dedicated S3 bucket for Terraform state storage
-- **AWS Resources**: VPC, subnets, security groups, and PEM key configured
+- **AWS Resources**: VPC, subnets, and security groups configured
 - **Configuration File**: Properly configured `config.yml` file (see below)
 
 ## Configuration Setup
@@ -39,22 +39,23 @@ The `config.yml` file now uses **array-based configuration** to support multiple
     Index 2: Tenant 2 Rancher + Tenant 2 K3S
     Index 3: Tenant 3 Rancher + Tenant 3 K3S
 
-## IP Whitelist Validation
+## Remote Execution
 
-The tool includes automatic IP validation to prevent SSH connection failures during infrastructure setup.
+The test runner now uses AWS Systems Manager Run Command instead of SSH.
 
-### How it works
-- Checks your current public IP address against the configured whitelist IP
-- Validates before any AWS infrastructure is created (fails fast if VPN is off)
-- **Note**: This only validates your local IP - you must manually add your IP to the AWS security group allowlist
+### What changed
+- No local IP whitelist check before Terraform runs
+- No SSH private key required for remote commands
+- EC2 instances get an SSM instance profile and bootstrap the SSM agent during provisioning
 
-### Configuration
-Add your whitelisted IP to your config file:
+## K3s Registry Setup
 
-```yaml
-aws:
-  whitelisted_ip: "123.45.67.89"  # Your public IP that's allowed in AWS security groups
-```
+The node bootstrap now prepares K3s config files before installation:
+- `/etc/rancher/k3s/config.yaml` for the shared datastore and TLS SANs
+- `/etc/rancher/k3s/registries.yaml` with required Docker Hub credentials
+- `/var/lib/rancher/k3s/agent/images/` with the K3s image tarball when preloading is enabled
+
+This “preload” path is K3s’s documented airgap image import mechanism. In this repo it is being used as an online optimization to reduce registry pulls and avoid Docker Hub throttling during bootstrap.
 
 ### Example Configuration
 
@@ -66,11 +67,16 @@ s3:
   region: us-east-2
 
 k3s:
+  preload_images: true
   versions:
     - v1.32.5+k3s1  # Host K3S version
     - v1.32.4+k3s1  # Tenant 1 K3S version  
     - v1.31.8+k3s1  # Tenant 2 K3S version
     - v1.30.11+k3s1 # Tenant 3 K3S version
+
+dockerhub:
+  username: your-dockerhub-username
+  password: your-dockerhub-password
 
 rancher:
   helm_commands:
@@ -124,13 +130,6 @@ rancher:
         --set agentTLSMode=system-store \
         --version 2.11.1
 
-aws:
-  whitelisted_ip: 123.45.67.89  # Your public IP that's allowed in AWS security groups
-  rsa_private_key: |
-    -----BEGIN RSA PRIVATE KEY-----
-    # Your AWS PEM key contents here
-    -----END RSA PRIVATE KEY-----
-
 tf_vars:
   aws_access_key: your-aws-access-key
   aws_secret_key: your-aws-secret-key
@@ -142,11 +141,13 @@ tf_vars:
   aws_ami: ami-xxxxxxxxx
   aws_subnet_id: subnet-xxxxxxxxx
   aws_security_group_id: sg-xxxxxxxxx
-  aws_pem_key_name: your-pem-key-name
   aws_rds_password: YourSecurePassword123
   aws_route53_fqdn: your-domain.com
   aws_ec2_instance_type: m5.large
 ```
+
+`tf_vars.aws_pem_key_name` is now optional. Leave it unset unless you still want an EC2 key pair attached for manual access.
+`dockerhub.username` and `dockerhub.password` are required.
 
 ## Usage
 

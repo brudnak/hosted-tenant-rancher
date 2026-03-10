@@ -18,28 +18,77 @@ resource "random_pet" "random_pet_rds" {
   separator = ""
 }
 
+data "aws_iam_policy_document" "ec2_assume_role" {
+  statement {
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["ec2.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "ssm_role" {
+  name               = "${var.aws_prefix}-ssm-${random_pet.random_pet.id}"
+  assume_role_policy = data.aws_iam_policy_document.ec2_assume_role.json
+}
+
+resource "aws_iam_role_policy_attachment" "ssm_core" {
+  role       = aws_iam_role.ssm_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_instance_profile" "ssm_profile" {
+  name = "${var.aws_prefix}-ssm-${random_pet.random_pet.id}"
+  role = aws_iam_role.ssm_role.name
+}
+
 resource "aws_instance" "aws_instance" {
   count                  = 2
   ami                    = var.aws_ami
   instance_type          = var.aws_ec2_instance_type
   subnet_id              = var.aws_subnet_id
   vpc_security_group_ids = [var.aws_security_group_id]
-  key_name               = var.aws_pem_key_name
+  iam_instance_profile   = aws_iam_instance_profile.ssm_profile.name
+  key_name               = var.aws_pem_key_name != "" ? var.aws_pem_key_name : null
+  user_data              = <<-EOF
+    #!/bin/bash
+    set -euxo pipefail
 
-    root_block_device {
-      volume_size = 200
-      tags = {
-        Name = "${random_pet.random_pet.keepers.aws_prefix}-${random_pet.random_pet.id}"
-        DoNotDelete = "True"
-        Owner = "${var.aws_prefix}-terraform"
-      }
-    }
+    if systemctl list-unit-files | grep -q '^amazon-ssm-agent.service'; then
+      systemctl enable amazon-ssm-agent
+      systemctl restart amazon-ssm-agent
+      exit 0
+    fi
 
+    if systemctl list-unit-files | grep -q '^snap.amazon-ssm-agent.amazon-ssm-agent.service'; then
+      systemctl enable snap.amazon-ssm-agent.amazon-ssm-agent.service
+      systemctl restart snap.amazon-ssm-agent.amazon-ssm-agent.service || snap start amazon-ssm-agent
+      exit 0
+    fi
+
+    if command -v snap >/dev/null 2>&1; then
+      snap install amazon-ssm-agent --classic
+      snap start amazon-ssm-agent
+      exit 0
+    fi
+  EOF
+
+  root_block_device {
+    volume_size = 200
     tags = {
-      Name = "${random_pet.random_pet.keepers.aws_prefix}-${random_pet.random_pet.id}"
+      Name        = "${random_pet.random_pet.keepers.aws_prefix}-${random_pet.random_pet.id}"
       DoNotDelete = "True"
-      Owner = "${var.aws_prefix}-terraform"
+      Owner       = "${var.aws_prefix}-terraform"
     }
+  }
+
+  tags = {
+    Name        = "${random_pet.random_pet.keepers.aws_prefix}-${random_pet.random_pet.id}"
+    DoNotDelete = "True"
+    Owner       = "${var.aws_prefix}-terraform"
+  }
 }
 
 resource "aws_lb_target_group" "aws_lb_target_group_80" {
@@ -151,7 +200,7 @@ resource "aws_acm_certificate" "cert" {
 }
 
 resource "aws_route53_record" "cert_validation" {
-  count = 1
+  count   = 1
   name    = element(aws_acm_certificate.cert.domain_validation_options.*.resource_record_name, count.index)
   type    = element(aws_acm_certificate.cert.domain_validation_options.*.resource_record_type, count.index)
   zone_id = data.aws_route53_zone.zone.zone_id
