@@ -158,7 +158,13 @@ resource "aws_lb_listener" "aws_lb_listener_80" {
 resource "aws_rds_cluster" "aws_rds_cluster" {
   cluster_identifier      = "${var.aws_prefix}-${random_pet.random_pet_rds.id}"
   engine                  = "aurora-mysql"
-  engine_version          = "5.7.mysql_aurora.2.11.1"
+
+  # Upgraded to Aurora MySQL 3 (8.0 compatible) for 2026
+  engine_version          = "8.0.mysql_aurora.3.12.0"
+
+  # Keeps things moving if a previous QA environment wasn't fully cleaned up
+  allow_major_version_upgrade = true
+
   availability_zones      = ["us-east-2a", "us-east-2b", "us-east-2c"]
   database_name           = "db${random_pet.random_pet_rds.id}"
   master_username         = "tfadmin"
