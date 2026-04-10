@@ -617,9 +617,30 @@ func (t *Tools) prepareK3SNode(nodeIP string, config K3SConfig, token, version s
 	}
 
 	airgapURL := buildK3SAirgapImageURL(version)
+	airgapSHA256, err := k3SChecksumForVersion("k3s.airgap_image_sha256s", version)
+	if err != nil {
+		return err
+	}
+
 	cmd := fmt.Sprintf(
-		"curl -sfL %s -o /tmp/k3s-airgap-images-amd64.tar.zst && sudo mv /tmp/k3s-airgap-images-amd64.tar.zst /var/lib/rancher/k3s/agent/images/",
+		`tmp_images="$(mktemp /tmp/k3s-airgap-images-amd64.XXXXXX)"
+trap 'rm -f "$tmp_images"' EXIT
+
+curl -fsSL -o "$tmp_images" %s
+
+if ! echo %s"  $tmp_images" | sha256sum -c -; then
+  echo "############################################################" >&2
+  echo "# SECURITY ERROR: K3s image checksum validation failed      #" >&2
+  echo "# Refusing to preload the downloaded image bundle.          #" >&2
+  echo "# Check k3s.version and k3s.airgap_image_sha256s.           #" >&2
+  echo "############################################################" >&2
+  exit 1
+fi
+
+sudo mv "$tmp_images" /var/lib/rancher/k3s/agent/images/k3s-airgap-images-amd64.tar.zst
+trap - EXIT`,
 		shellQuote(airgapURL),
+		shellQuote(airgapSHA256),
 	)
 	if _, err := t.RunCommand(cmd, nodeIP); err != nil {
 		return fmt.Errorf("failed preloading K3s images from %s: %w", airgapURL, err)
@@ -629,8 +650,30 @@ func (t *Tools) prepareK3SNode(nodeIP string, config K3SConfig, token, version s
 }
 
 func (t *Tools) installK3SServer(nodeIP, version string) error {
+	installScriptSHA256, err := k3SChecksumForVersion("k3s.install_script_sha256s", version)
+	if err != nil {
+		return err
+	}
+
+	installScriptURL := buildK3SInstallScriptURL(version)
 	cmd := fmt.Sprintf(
-		"curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=%s sh -s - server",
+		`tmp_script="$(mktemp /tmp/k3s-install.XXXXXX)"
+trap 'rm -f "$tmp_script"' EXIT
+
+curl -fsSL -o "$tmp_script" %s
+
+if ! echo %s"  $tmp_script" | sha256sum -c -; then
+  echo "############################################################" >&2
+  echo "# SECURITY ERROR: K3s installer checksum validation failed  #" >&2
+  echo "# Refusing to run the downloaded installer.                 #" >&2
+  echo "# Check k3s.version and k3s.install_script_sha256s.         #" >&2
+  echo "############################################################" >&2
+  exit 1
+fi
+
+sudo INSTALL_K3S_VERSION=%s sh "$tmp_script" server`,
+		shellQuote(installScriptURL),
+		shellQuote(installScriptSHA256),
 		shellQuote(version),
 	)
 	if _, err := t.RunCommand(cmd, nodeIP); err != nil {
@@ -723,6 +766,21 @@ func buildK3SRegistriesContent(username, password string) string {
 func buildK3SAirgapImageURL(version string) string {
 	escapedVersion := strings.ReplaceAll(version, "+", "%2B")
 	return fmt.Sprintf("https://github.com/k3s-io/k3s/releases/download/%s/k3s-airgap-images-amd64.tar.zst", escapedVersion)
+}
+
+func buildK3SInstallScriptURL(version string) string {
+	escapedVersion := strings.ReplaceAll(version, "+", "%2B")
+	return fmt.Sprintf("https://raw.githubusercontent.com/k3s-io/k3s/%s/install.sh", escapedVersion)
+}
+
+func k3SChecksumForVersion(configKey, version string) (string, error) {
+	checksums := viper.GetStringMapString(configKey)
+	checksum := strings.TrimSpace(checksums[version])
+	if checksum == "" {
+		return "", fmt.Errorf("%s.%s must be set", configKey, version)
+	}
+
+	return checksum, nil
 }
 
 func validateDockerHubConfig() error {

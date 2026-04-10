@@ -426,7 +426,29 @@ func validateArrayCounts() error {
 			len(k3sVersions), totalInstances, totalInstances)
 	}
 
+	if err := validateK3SChecksums(k3sVersions); err != nil {
+		return err
+	}
+
 	log.Printf("✅ Validation passed: %d instances, %d Helm commands, %d K3S versions", totalInstances, len(helmCommands), len(k3sVersions))
+	return nil
+}
+
+func validateK3SChecksums(k3sVersions []string) error {
+	installerChecksums := viper.GetStringMapString("k3s.install_script_sha256s")
+	airgapChecksums := viper.GetStringMapString("k3s.airgap_image_sha256s")
+	preloadImages := viper.GetBool("k3s.preload_images")
+
+	for _, version := range k3sVersions {
+		if strings.TrimSpace(installerChecksums[version]) == "" {
+			return fmt.Errorf("k3s.install_script_sha256s.%s must be set", version)
+		}
+
+		if preloadImages && strings.TrimSpace(airgapChecksums[version]) == "" {
+			return fmt.Errorf("k3s.airgap_image_sha256s.%s must be set when k3s.preload_images is true", version)
+		}
+	}
+
 	return nil
 }
 

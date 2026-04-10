@@ -57,6 +57,12 @@ The node bootstrap now prepares K3s config files before installation:
 
 This “preload” path is K3s’s documented airgap image import mechanism. In this repo it is being used as an online optimization to reduce registry pulls and avoid Docker Hub throttling during bootstrap.
 
+The K3s bootstrap path verifies downloaded upstream artifacts before using them:
+- The repo does not use `curl | sh` for the K3s installer.
+- The installer is downloaded from the version tag in `k3s.versions`.
+- The installer must match `k3s.install_script_sha256s` for that version before it runs.
+- The airgap image bundle must match `k3s.airgap_image_sha256s` for that version before it is moved into K3s's image import directory.
+
 ### Example Configuration
 
 ```yaml
@@ -73,6 +79,16 @@ k3s:
     - v1.32.4+k3s1  # Tenant 1 K3S version  
     - v1.31.8+k3s1  # Tenant 2 K3S version
     - v1.30.11+k3s1 # Tenant 3 K3S version
+  install_script_sha256s:
+    v1.32.5+k3s1: installer-sha256-for-v1.32.5+k3s1
+    v1.32.4+k3s1: installer-sha256-for-v1.32.4+k3s1
+    v1.31.8+k3s1: installer-sha256-for-v1.31.8+k3s1
+    v1.30.11+k3s1: installer-sha256-for-v1.30.11+k3s1
+  airgap_image_sha256s:
+    v1.32.5+k3s1: airgap-image-sha256-for-v1.32.5+k3s1
+    v1.32.4+k3s1: airgap-image-sha256-for-v1.32.4+k3s1
+    v1.31.8+k3s1: airgap-image-sha256-for-v1.31.8+k3s1
+    v1.30.11+k3s1: airgap-image-sha256-for-v1.30.11+k3s1
 
 dockerhub:
   username: your-dockerhub-username
@@ -148,6 +164,36 @@ tf_vars:
 
 `tf_vars.aws_pem_key_name` is now optional. Leave it unset unless you still want an EC2 key pair attached for manual access.
 `dockerhub.username` and `dockerhub.password` are required.
+
+### Updating K3s Checksums
+
+Update the K3s checksums whenever you add or change an entry in `k3s.versions`.
+
+For each K3s version, download the exact installer script from the version tag and compute its SHA256:
+
+```bash
+export K3S_VERSION="v1.33.7+k3s3"
+curl -fsSL "https://raw.githubusercontent.com/k3s-io/k3s/${K3S_VERSION/+/%2B}/install.sh" -o /tmp/k3s-install.sh
+shasum -a 256 /tmp/k3s-install.sh
+```
+
+Then download the matching airgap image bundle and compute its SHA256:
+
+```bash
+export K3S_VERSION="v1.33.7+k3s3"
+curl -fsSL "https://github.com/k3s-io/k3s/releases/download/${K3S_VERSION/+/%2B}/k3s-airgap-images-amd64.tar.zst" -o /tmp/k3s-airgap-images-amd64.tar.zst
+shasum -a 256 /tmp/k3s-airgap-images-amd64.tar.zst
+```
+
+Copy only the hash on the left into `config.yml`:
+
+```yaml
+k3s:
+  install_script_sha256s:
+    v1.33.7+k3s3: "9ca7930c31179d83bc13de20078fd8ad3e1ee00875b31f39a7e524ca4ef7d9de"
+  airgap_image_sha256s:
+    v1.33.7+k3s3: "b0d7062008fa7fcad9ad7c6b60f74ae1c561927dbb5a4105433f5afbd091361b"
+```
 
 ## Usage
 
