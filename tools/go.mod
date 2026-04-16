@@ -1,6 +1,6 @@
 module github.com/brudnak/hosted-tenant-rancher/tools
 
-go 1.22
+go 1.26.1
 
 require (
 	github.com/aws/aws-sdk-go v1.55.8

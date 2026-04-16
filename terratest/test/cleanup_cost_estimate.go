@@ -507,30 +507,37 @@ func awsPricingLocation(region string) (string, error) {
 }
 
 func logCleanupCostEstimate(estimate *cleanupCostEstimate) {
+	logCleanupCostEstimateWithPrefix(estimate, "[cleanup]")
+}
+
+func logCleanupCostEstimateWithPrefix(estimate *cleanupCostEstimate, prefix string) {
 	totalEstimatedUSD := estimate.EstimatedEC2CostUSD + estimate.EstimatedEBSCostUSD + estimate.EstimatedRDSCostUSD
-	log.Printf("[cleanup] Estimated AWS cost for this run (live pricing):")
-	log.Printf("[cleanup] Region: %s", estimate.Region)
+	log.Printf("%s Estimated AWS cost for this run (live pricing):", prefix)
+	log.Printf("%s Region: %s", prefix, estimate.Region)
 
 	for _, line := range estimate.EC2Lines {
-		log.Printf("[cleanup] EC2: %d x %s over %.2f total hours at $%.4f/hour -> $%.2f estimated",
+		log.Printf("%s EC2: %d x %s over %.2f total hours at $%.4f/hour -> $%.2f estimated",
+			prefix,
 			line.Count, line.InstanceType, line.TotalRuntimeHours, line.HourlyRateUSD, line.EstimatedCostUSD)
 	}
 
 	for _, line := range estimate.EBSLines {
-		log.Printf("[cleanup] EBS: %d x %d GiB %s over %.2f total hours at $%.4f/GiB-month -> $%.2f estimated",
+		log.Printf("%s EBS: %d x %d GiB %s over %.2f total hours at $%.4f/GiB-month -> $%.2f estimated",
+			prefix,
 			line.VolumeCount, line.VolumeSizeGiB, line.VolumeType, line.TotalRuntimeHours, line.MonthlyRateUSD, line.EstimatedCostUSD)
 	}
 
 	for _, line := range estimate.RDSLines {
-		log.Printf("[cleanup] RDS: %d x %s (%s) over %.2f total hours at $%.4f/hour -> $%.2f estimated",
+		log.Printf("%s RDS: %d x %s (%s) over %.2f total hours at $%.4f/hour -> $%.2f estimated",
+			prefix,
 			line.Count, line.DBClass, line.Engine, line.TotalRuntimeHours, line.HourlyRateUSD, line.EstimatedCostUSD)
 	}
 
 	if estimate.RDSStorageNotIncluded {
-		log.Printf("[cleanup] Note: Aurora storage is usage-based and is not included in this estimate.")
+		log.Printf("%s Note: Aurora storage is usage-based and is not included in this estimate.", prefix)
 	}
 
-	log.Printf("[cleanup] Estimated total (EC2 + EBS + RDS instance-hours): $%.2f", totalEstimatedUSD)
+	log.Printf("%s Estimated total (EC2 + EBS + RDS instance-hours): $%.2f", prefix, totalEstimatedUSD)
 }
 
 func normalizeRDSEngine(engine string) string {

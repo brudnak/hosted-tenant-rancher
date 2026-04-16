@@ -340,11 +340,13 @@ func TestCleanup(t *testing.T) {
 
 	createAWSVar()
 
+	var cleanupEstimate *cleanupCostEstimate
 	totalInstances := getTotalRancherInstances()
 	if outputs, err := terraform.OutputMapE(t, terraformOptions, "flat_outputs"); err == nil {
 		if estimate, estimateErr := estimateCurrentRunCost(totalInstances, outputs); estimateErr != nil {
 			log.Printf("[cleanup] Could not estimate EC2/EBS/RDS cost before destroy: %v", estimateErr)
 		} else {
+			cleanupEstimate = estimate
 			logCleanupCostEstimate(estimate)
 		}
 	} else {
@@ -376,6 +378,11 @@ func TestCleanup(t *testing.T) {
 	err = hcl.CleanupTerraformConfig()
 	if err != nil {
 		log.Printf("error cleaning up main.tf and dirs: %s", err)
+	}
+
+	if cleanupEstimate != nil {
+		log.Printf("[cleanup] Cleanup finished. Final estimated run-cost summary:")
+		logCleanupCostEstimateWithPrefix(cleanupEstimate, "[cleanup-summary]")
 	}
 }
 
