@@ -9,9 +9,7 @@ terraform {
 }
 
 provider "aws" {
-  region     = "us-east-2"
-  access_key = var.aws_access_key
-  secret_key = var.aws_secret_key
+  region = "us-east-2"
 }
 
 # Variables - only declare what we need at root level
@@ -19,16 +17,6 @@ variable "total_rancher_instances" {
   type        = number
   description = "Total number of Rancher instances (host + tenants)"
   default     = 2
-}
-
-variable "aws_access_key" {
-  type        = string
-  description = "AWS access key"
-}
-
-variable "aws_secret_key" {
-  type        = string
-  description = "AWS secret key"
 }
 
 variable "aws_prefix" {

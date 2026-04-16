@@ -1,0 +1,32 @@
+rancher:
+  mode: auto
+  versions:
+    - "2.13-head"
+    - "2.13.4"
+    - "2.12.4"
+  distro: auto
+  bootstrap_password: "change-me"
+  auto_approve: false
+
+k3s:
+  preload_images: true
+
+total_rancher_instances: 3
+
+s3:
+  bucket: your-dedicated-s3-bucket
+  region: us-east-2
+
+tf_vars:
+  aws_prefix: "xyz"
+  aws_vpc: ""
+  aws_subnet_a: ""
+  aws_subnet_b: ""
+  aws_subnet_c: ""
+  aws_ami: ""
+  aws_subnet_id: ""
+  aws_security_group_id: ""
+  aws_pem_key_name: ""
+  aws_rds_password: ""
+  aws_route53_fqdn: ""
+  aws_ec2_instance_type: "m5.large"

@@ -1,6 +1,6 @@
 # Hosted/Tenant Rancher Guide
 
-This README provides instructions for running and managing multiple Hosted/Tenant Rancher instances with different K3S and Rancher versions.
+This repo creates a hosted Rancher plus one or more tenant Ranchers on imported downstream K3s clusters, with a simpler config flow and optional auto-version resolution.
 
 ## Overview
 
@@ -18,26 +18,87 @@ This system creates a **Host Rancher** that manages multiple **Tenant Ranchers**
 
 ## Prerequisites
 
-- **S3 Bucket**: Dedicated S3 bucket for Terraform state storage
-- **AWS Resources**: VPC, subnets, and security groups configured
-- **Configuration File**: Properly configured `config.yml` file (see below)
+- Dedicated S3 bucket for Terraform state storage
+- Existing AWS VPC, subnets, AMI, and security group values
+- A repo-root `tool-config.yml`
+- Local `kubectl`, `helm`, and `terraform`
 
-## Configuration Setup
+## Simpler Config
 
-The `config.yml` file now uses **array-based configuration** to support multiple instances with different versions. Place this file at the repository root.
+Copy one of these examples to `tool-config.yml`:
 
-### Key Configuration Changes
+- [tool-config.auto.example.yml](/Users/andrewbrudnak/github.com/brudnak/hosted-tenant-rancher/tool-config.auto.example.yml)
+- [tool-config.manual.example.yml](/Users/andrewbrudnak/github.com/brudnak/hosted-tenant-rancher/tool-config.manual.example.yml)
 
-- **`total_rancher_instances`**: Total number of Rancher instances (2-4 supported)
-- **`k3s.versions`**: Array of K3S versions (one per instance)
-- **`rancher.helm_commands`**: Array of Helm installation commands (one per instance)
+`tool-config.yml` replaces the old `config.yml` flow. The test code still falls back to `config.yml` for compatibility, but the new path is `tool-config.yml`.
 
-### Array Index Mapping
+### Secrets
+
+These values now come from environment variables instead of config:
+
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `DOCKERHUB_USERNAME`
+- `DOCKERHUB_PASSWORD`
+
+`DOCKERHUB_USERNAME` and `DOCKERHUB_PASSWORD` are optional. If both are unset, the repo skips `registries.yaml` generation and K3s will pull anonymously.
+
+The easiest local setup is `~/.zprofile`:
+
+```bash
+export AWS_ACCESS_KEY_ID="your-aws-access-key"
+export AWS_SECRET_ACCESS_KEY="your-aws-secret-key"
+export DOCKERHUB_USERNAME="your-dockerhub-username"
+export DOCKERHUB_PASSWORD="your-dockerhub-password"
+```
+
+### Config Shape
+
+- `total_rancher_instances`: total host + tenant instances, `2-4`
+- `rancher.mode`: `manual` or `auto`
+- `s3.*`: backend bucket/region
+- `tf_vars.*`: non-secret AWS/Terraform inputs
+
+Index mapping is still:
 
     Index 0: Host Rancher + Host K3S
-    Index 1: Tenant 1 Rancher + Tenant 1 K3S  
+    Index 1: Tenant 1 Rancher + Tenant 1 K3S
     Index 2: Tenant 2 Rancher + Tenant 2 K3S
     Index 3: Tenant 3 Rancher + Tenant 3 K3S
+
+## Auto Mode
+
+Use `rancher.mode: auto` when you want to give Rancher versions and let the tool resolve the rest.
+
+In auto mode the test will:
+
+1. Resolve the right Rancher chart source and chart version.
+2. Resolve image overrides for head/alpha/rc builds when needed.
+3. Read the SUSE support matrix for the chosen Rancher compatibility baseline.
+4. Pick the highest supported K3s minor and latest patch in that line.
+5. Download and hash the exact K3s installer and airgap bundle URLs.
+6. Generate `rancher.helm_commands` and `k3s.*` values in memory.
+7. Print the plan and, on macOS, show a GoLand-friendly native confirmation dialog unless `rancher.auto_approve: true`.
+
+Auto mode accepts:
+
+- `rancher.version` for a single instance
+- `rancher.versions` for multiple instances
+- `rancher.distro` with `auto`, `community`, or `prime`
+- `rancher.bootstrap_password`
+- `rancher.auto_approve`
+
+## Manual Mode
+
+Use `rancher.mode: manual` when you want full control over Helm commands and K3s versions.
+
+Manual mode accepts:
+
+- `rancher.helm_commands`
+- `k3s.version` or `k3s.versions`
+- `k3s.install_script_sha256` or `k3s.install_script_sha256s`
+- `k3s.airgap_image_sha256` or `k3s.airgap_image_sha256s`
+- `k3s.preload_images`
 
 ## Remote Execution
 
@@ -52,118 +113,16 @@ The test runner now uses AWS Systems Manager Run Command instead of SSH.
 
 The node bootstrap now prepares K3s config files before installation:
 - `/etc/rancher/k3s/config.yaml` for the shared datastore and TLS SANs
-- `/etc/rancher/k3s/registries.yaml` with required Docker Hub credentials
+- `/etc/rancher/k3s/registries.yaml` when Docker Hub credentials are present
 - `/var/lib/rancher/k3s/agent/images/` with the K3s image tarball when preloading is enabled
 
 This “preload” path is K3s’s documented airgap image import mechanism. In this repo it is being used as an online optimization to reduce registry pulls and avoid Docker Hub throttling during bootstrap.
 
 The K3s bootstrap path verifies downloaded upstream artifacts before using them:
 - The repo does not use `curl | sh` for the K3s installer.
-- The installer is downloaded from the version tag in `k3s.versions`.
-- The installer must match `k3s.install_script_sha256s` for that version before it runs.
-- The airgap image bundle must match `k3s.airgap_image_sha256s` for that version before it is moved into K3s's image import directory.
-
-### Example Configuration
-
-```yaml
-total_rancher_instances: 4  # 1 host + 3 tenants
-
-s3:
-  bucket: your-dedicated-s3-bucket
-  region: us-east-2
-
-k3s:
-  preload_images: true
-  versions:
-    - v1.32.5+k3s1  # Host K3S version
-    - v1.32.4+k3s1  # Tenant 1 K3S version  
-    - v1.31.8+k3s1  # Tenant 2 K3S version
-    - v1.30.11+k3s1 # Tenant 3 K3S version
-  install_script_sha256s:
-    v1.32.5+k3s1: installer-sha256-for-v1.32.5+k3s1
-    v1.32.4+k3s1: installer-sha256-for-v1.32.4+k3s1
-    v1.31.8+k3s1: installer-sha256-for-v1.31.8+k3s1
-    v1.30.11+k3s1: installer-sha256-for-v1.30.11+k3s1
-  airgap_image_sha256s:
-    v1.32.5+k3s1: airgap-image-sha256-for-v1.32.5+k3s1
-    v1.32.4+k3s1: airgap-image-sha256-for-v1.32.4+k3s1
-    v1.31.8+k3s1: airgap-image-sha256-for-v1.31.8+k3s1
-    v1.30.11+k3s1: airgap-image-sha256-for-v1.30.11+k3s1
-
-dockerhub:
-  username: your-dockerhub-username
-  password: your-dockerhub-password
-
-rancher:
-  helm_commands:
-    - |
-      # Host Rancher (alpha/head version)
-      helm repo add rancher-alpha https://releases.rancher.com/server-charts/alpha
-      helm repo update
-      helm install rancher rancher-alpha/rancher \
-        --namespace cattle-system \
-        --set hostname=placeholder \
-        --set bootstrapPassword=your-password \
-        --set global.cattle.psp.enabled=false \
-        --version 2.12.0-alpha16 \
-        --set rancherImageTag=head \
-        --set tls=external \
-        --set agentTLSMode=system-store
-    - |
-      # Tenant 1 Rancher (latest stable)
-      helm repo add rancher-latest https://releases.rancher.com/server-charts/latest
-      helm repo update
-      helm install rancher rancher-latest/rancher \
-        --namespace cattle-system \
-        --set hostname=placeholder \
-        --set bootstrapPassword=your-password \
-        --set global.cattle.psp.enabled=false \
-        --set tls=external \
-        --set agentTLSMode=system-store \
-        --version 2.11.3
-    - |
-      # Tenant 2 Rancher (previous version)
-      helm repo add rancher-latest https://releases.rancher.com/server-charts/latest
-      helm repo update
-      helm install rancher rancher-latest/rancher \
-        --namespace cattle-system \
-        --set hostname=placeholder \
-        --set bootstrapPassword=your-password \
-        --set global.cattle.psp.enabled=false \
-        --set tls=external \
-        --set agentTLSMode=system-store \
-        --version 2.11.2
-    - |
-      # Tenant 3 Rancher (older version)
-      helm repo add rancher-latest https://releases.rancher.com/server-charts/latest
-      helm repo update
-      helm install rancher rancher-latest/rancher \
-        --namespace cattle-system \
-        --set hostname=placeholder \
-        --set bootstrapPassword=your-password \
-        --set global.cattle.psp.enabled=false \
-        --set tls=external \
-        --set agentTLSMode=system-store \
-        --version 2.11.1
-
-tf_vars:
-  aws_access_key: your-aws-access-key
-  aws_secret_key: your-aws-secret-key
-  aws_prefix: your-initials
-  aws_vpc: vpc-xxxxxxxxx
-  aws_subnet_a: subnet-xxxxxxxxx
-  aws_subnet_b: subnet-xxxxxxxxx
-  aws_subnet_c: subnet-xxxxxxxxx
-  aws_ami: ami-xxxxxxxxx
-  aws_subnet_id: subnet-xxxxxxxxx
-  aws_security_group_id: sg-xxxxxxxxx
-  aws_rds_password: YourSecurePassword123
-  aws_route53_fqdn: your-domain.com
-  aws_ec2_instance_type: m5.large
-```
-
-`tf_vars.aws_pem_key_name` is now optional. Leave it unset unless you still want an EC2 key pair attached for manual access.
-`dockerhub.username` and `dockerhub.password` are required.
+- The installer is downloaded from the exact version tag.
+- The installer must match the pinned SHA256 before it runs.
+- The airgap image bundle must match the pinned SHA256 before it is moved into the K3s image import directory.
 
 ### Updating K3s Checksums
 
@@ -185,7 +144,7 @@ curl -fsSL "https://github.com/k3s-io/k3s/releases/download/${K3S_VERSION/+/%2B}
 shasum -a 256 /tmp/k3s-airgap-images-amd64.tar.zst
 ```
 
-Copy only the hash on the left into `config.yml`:
+Copy only the hash on the left into `tool-config.yml`:
 
 ```yaml
 k3s:

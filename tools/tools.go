@@ -193,8 +193,14 @@ func initAWSClients() error {
 	}
 
 	cfg := aws.NewConfig().WithRegion(resolveAWSRegion())
-	accessKey := viper.GetString("tf_vars.aws_access_key")
-	secretKey := viper.GetString("tf_vars.aws_secret_key")
+	accessKey := strings.TrimSpace(os.Getenv("AWS_ACCESS_KEY_ID"))
+	secretKey := strings.TrimSpace(os.Getenv("AWS_SECRET_ACCESS_KEY"))
+	if accessKey == "" {
+		accessKey = viper.GetString("tf_vars.aws_access_key")
+	}
+	if secretKey == "" {
+		secretKey = viper.GetString("tf_vars.aws_secret_key")
+	}
 	if accessKey != "" && secretKey != "" {
 		cfg = cfg.WithCredentials(credentials.NewStaticCredentials(
 			accessKey,
@@ -599,12 +605,7 @@ func (t *Tools) prepareK3SNode(nodeIP string, config K3SConfig, token, version s
 		return fmt.Errorf("failed writing K3s config: %w", err)
 	}
 
-	if err := validateDockerHubConfig(); err != nil {
-		return err
-	}
-
-	dockerHubUser := viper.GetString("dockerhub.username")
-	dockerHubPassword := viper.GetString("dockerhub.password")
+	dockerHubUser, dockerHubPassword := dockerHubCredentials()
 	if dockerHubUser != "" && dockerHubPassword != "" {
 		registriesContent := buildK3SRegistriesContent(dockerHubUser, dockerHubPassword)
 		if err := t.writeRemoteFile(nodeIP, "/etc/rancher/k3s/registries.yaml", registriesContent); err != nil {
@@ -784,13 +785,25 @@ func k3SChecksumForVersion(configKey, version string) (string, error) {
 }
 
 func validateDockerHubConfig() error {
-	username := viper.GetString("dockerhub.username")
-	password := viper.GetString("dockerhub.password")
+	username, password := dockerHubCredentials()
+	if username == "" && password == "" {
+		return nil
+	}
 	if username == "" || password == "" {
-		return fmt.Errorf("dockerhub.username and dockerhub.password are required")
+		return fmt.Errorf("set both DOCKERHUB_USERNAME and DOCKERHUB_PASSWORD, or configure both dockerhub.username and dockerhub.password")
 	}
 
 	return nil
+}
+
+func dockerHubCredentials() (string, string) {
+	username := strings.TrimSpace(os.Getenv("DOCKERHUB_USERNAME"))
+	password := strings.TrimSpace(os.Getenv("DOCKERHUB_PASSWORD"))
+	if username != "" || password != "" {
+		return username, password
+	}
+
+	return strings.TrimSpace(viper.GetString("dockerhub.username")), strings.TrimSpace(viper.GetString("dockerhub.password"))
 }
 
 func shellQuote(value string) string {

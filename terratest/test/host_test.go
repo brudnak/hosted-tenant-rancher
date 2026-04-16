@@ -46,11 +46,32 @@ var s3UploadExcludedNames = map[string]struct{}{
 }
 
 func TestHosted(t *testing.T) {
+	setupConfig(t)
 
-	// Validate arrays AND helm commands before any infrastructure
-	err := validateArrayCountsWithHelm()
+	totalInstances := getTotalRancherInstances()
+	if totalInstances == 0 {
+		t.Fatal("total_rancher_instances must be set")
+	}
+
+	resolvedPlans, err := prepareRancherConfiguration(totalInstances)
 	if err != nil {
-		log.Fatal("Error with validation: ", err)
+		t.Fatalf("failed to prepare Rancher configuration: %v", err)
+	}
+
+	helmCommands := viper.GetStringSlice("rancher.helm_commands")
+	k3sVersions := viper.GetStringSlice("k3s.versions")
+
+	if err := validateLocalToolingPreflight(helmCommands); err != nil {
+		t.Fatalf("local tooling preflight failed: %v", err)
+	}
+	if err := validateSecretEnvironment(); err != nil {
+		t.Fatalf("secret environment preflight failed: %v", err)
+	}
+	if err := validateHostedConfiguration(totalInstances, helmCommands, resolvedPlans); err != nil {
+		t.Fatalf("configuration validation failed: %v", err)
+	}
+	if err := confirmResolvedPlans(resolvedPlans); err != nil {
+		t.Fatalf("canceled before provisioning: %v", err)
 	}
 
 	err = checkS3ObjectExists(tfState)
@@ -59,16 +80,6 @@ func TestHosted(t *testing.T) {
 	}
 
 	createAWSVar()
-
-	err = os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))
-	if err != nil {
-		log.Printf("error setting env: %v", err)
-	}
-
-	err = os.Setenv("AWS_SECRET_ACCESS_KEY", viper.GetString("tf_vars.aws_secret_key"))
-	if err != nil {
-		log.Printf("error setting env: %v", err)
-	}
 
 	terraformOptions := &terraform.Options{
 		TerraformDir: "../modules/aws",
@@ -87,9 +98,6 @@ func TestHosted(t *testing.T) {
 	terraform.InitAndApply(t, terraformOptions)
 
 	flatOutputs := terraform.OutputMap(t, terraformOptions, "flat_outputs")
-	totalInstances := viper.GetInt("total_rancher_instances")
-	helmCommands := viper.GetStringSlice("rancher.helm_commands")
-	k3sVersions := viper.GetStringSlice("k3s.versions")
 
 	var hostConfig toolkit.K3SConfig
 	var tenantConfigs []toolkit.K3SConfig
@@ -153,14 +161,6 @@ func TestHosted(t *testing.T) {
 	err = waitForRancherStable(hostConfig.RancherURL, 10*time.Minute)
 	if err != nil {
 		t.Fatalf("Host Rancher failed to become stable: %v", err)
-	}
-
-	viper.AddConfigPath("../../")
-	viper.SetConfigName("config")
-	viper.SetConfigType("yml")
-	err = viper.ReadInConfig()
-	if err != nil {
-		log.Println("error reading config:", err)
 	}
 
 	// Get bootstrap password from first helm command
@@ -328,20 +328,27 @@ func setupTenantPhase2(t *testing.T, tenantIndex, helmCommandIndex int, tenantCo
 }
 
 func TestCleanup(t *testing.T) {
+	setupConfig(t)
+	if err := validateSecretEnvironment(); err != nil {
+		t.Fatalf("secret environment preflight failed: %v", err)
+	}
+
 	terraformOptions := terraform.WithDefaultRetryableErrors(t, &terraform.Options{
 		TerraformDir: "../modules/aws",
 		NoColor:      true,
 	})
 
 	createAWSVar()
-	err := os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))
-	if err != nil {
-		log.Printf("error setting env: %v", err)
-	}
 
-	err = os.Setenv("AWS_SECRET_ACCESS_KEY", viper.GetString("tf_vars.aws_secret_key"))
-	if err != nil {
-		log.Printf("error setting env: %v", err)
+	totalInstances := getTotalRancherInstances()
+	if outputs, err := terraform.OutputMapE(t, terraformOptions, "flat_outputs"); err == nil {
+		if estimate, estimateErr := estimateCurrentRunCost(totalInstances, outputs); estimateErr != nil {
+			log.Printf("[cleanup] Could not estimate EC2/EBS/RDS cost before destroy: %v", estimateErr)
+		} else {
+			logCleanupCostEstimate(estimate)
+		}
+	} else {
+		log.Printf("[cleanup] Could not load terraform outputs before destroy: %v", err)
 	}
 
 	terraform.Destroy(t, terraformOptions)
@@ -361,16 +368,7 @@ func TestCleanup(t *testing.T) {
 	cleanupFolders(folderPaths...)
 	cleanupRancherDirectoriesSafe()
 
-	viper.AddConfigPath("../../")
-	viper.SetConfigName("config")
-	viper.SetConfigType("yml")
-
-	err = viper.ReadInConfig()
-	if err != nil {
-		log.Println("error reading config:", err)
-	}
-
-	err = clearS3Bucket(viper.GetString("s3.bucket"))
+	err := clearS3Bucket(viper.GetString("s3.bucket"))
 	if err != nil {
 		log.Printf("Error clearing bucket [from func clearS3Bucket]: %v", err)
 	}
@@ -394,15 +392,11 @@ func TestSetupImport(t *testing.T) {
 }
 
 func validateArrayCounts() error {
-	viper.AddConfigPath("../../")
-	viper.SetConfigName("config")
-	viper.SetConfigType("yml")
-	err := viper.ReadInConfig()
-	if err != nil {
+	if err := ensureConfigLoaded(); err != nil {
 		return fmt.Errorf("error reading config: %v", err)
 	}
 
-	totalInstances := viper.GetInt("total_rancher_instances")
+	totalInstances := getTotalRancherInstances()
 	helmCommands := viper.GetStringSlice("rancher.helm_commands")
 	k3sVersions := viper.GetStringSlice("k3s.versions")
 
@@ -827,17 +821,12 @@ func cleanupFolders(paths ...string) {
 }
 
 func createAWSVar() {
-	viper.AddConfigPath("../../")
-	viper.SetConfigName("config")
-	viper.SetConfigType("yml")
-	err := viper.ReadInConfig()
-	if err != nil {
+	if err := ensureConfigLoaded(); err != nil {
 		log.Println("error reading config:", err)
+		return
 	}
 
 	hcl.GenAwsVar(
-		viper.GetString("tf_vars.aws_access_key"),
-		viper.GetString("tf_vars.aws_secret_key"),
 		viper.GetString("tf_vars.aws_prefix"),
 		viper.GetString("tf_vars.aws_vpc"),
 		viper.GetString("tf_vars.aws_subnet_a"),
@@ -854,20 +843,7 @@ func createAWSVar() {
 }
 
 func checkS3ObjectExists(item string) error {
-	viper.AddConfigPath("../../")
-	viper.SetConfigName("config")
-	viper.SetConfigType("yml")
-	err := viper.ReadInConfig()
-
-	err = os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))
-	if err != nil {
-		log.Println("Error setting env")
-		return err
-	}
-
-	err = os.Setenv("AWS_SECRET_ACCESS_KEY", viper.GetString("tf_vars.aws_secret_key"))
-	if err != nil {
-		log.Println("Error setting env")
+	if err := ensureConfigLoaded(); err != nil {
 		return err
 	}
 
@@ -879,7 +855,7 @@ func checkS3ObjectExists(item string) error {
 
 	svc := s3.New(sess)
 
-	_, err = svc.HeadObject(&s3.HeadObjectInput{Bucket: aws.String(bucket), Key: aws.String(item)})
+	_, err := svc.HeadObject(&s3.HeadObjectInput{Bucket: aws.String(bucket), Key: aws.String(item)})
 	if err != nil {
 		// If the error is due to the file not existing, that's fine, and we return nil.
 		var aErr awserr.Error
@@ -899,23 +875,8 @@ func checkS3ObjectExists(item string) error {
 }
 
 func uploadFolderToS3(folderPath string) error {
-	// Initialize viper and set environment variables
-	viper.AddConfigPath("../../")
-	viper.SetConfigName("config")
-	viper.SetConfigType("yml")
-	err := viper.ReadInConfig()
-	if err != nil {
+	if err := ensureConfigLoaded(); err != nil {
 		return fmt.Errorf("error reading config: %w", err)
-	}
-
-	err = os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))
-	if err != nil {
-		return fmt.Errorf("error setting AWS_ACCESS_KEY_ID: %w", err)
-	}
-
-	err = os.Setenv("AWS_SECRET_ACCESS_KEY", viper.GetString("tf_vars.aws_secret_key"))
-	if err != nil {
-		return fmt.Errorf("error setting AWS_SECRET_ACCESS_KEY: %w", err)
 	}
 
 	// Create a new AWS session
@@ -991,23 +952,8 @@ func uploadFolderToS3(folderPath string) error {
 }
 
 func clearS3Bucket(bucketName string) error {
-	// Initialize viper and set environment variables
-	viper.AddConfigPath("../../")
-	viper.SetConfigName("config")
-	viper.SetConfigType("yml")
-	err := viper.ReadInConfig()
-	if err != nil {
+	if err := ensureConfigLoaded(); err != nil {
 		return fmt.Errorf("error reading config: %w", err)
-	}
-
-	err = os.Setenv("AWS_ACCESS_KEY_ID", viper.GetString("tf_vars.aws_access_key"))
-	if err != nil {
-		return fmt.Errorf("error setting AWS_ACCESS_KEY_ID: %w", err)
-	}
-
-	err = os.Setenv("AWS_SECRET_ACCESS_KEY", viper.GetString("tf_vars.aws_secret_key"))
-	if err != nil {
-		return fmt.Errorf("error setting AWS_SECRET_ACCESS_KEY: %w", err)
 	}
 
 	// Create a new AWS session

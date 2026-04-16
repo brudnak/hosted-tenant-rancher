@@ -314,6 +314,7 @@ terraform.tfstate*
 var.auto.tfvars
 config
 config.yml
+tool-config.yml
 host.yml
 tenant.yml
 tenant_kube_config.yml

@@ -1,0 +1,54 @@
+rancher:
+  mode: manual
+  helm_commands:
+    - |
+      helm install rancher rancher-alpha/rancher \
+        --namespace cattle-system \
+        --set hostname=placeholder \
+        --set bootstrapPassword=change-me \
+        --set global.cattle.psp.enabled=false \
+        --set tls=external \
+        --set agentTLSMode=system-store \
+        --version 2.12.0-alpha16 \
+        --set rancherImageTag=head
+    - |
+      helm install rancher rancher-latest/rancher \
+        --namespace cattle-system \
+        --set hostname=placeholder \
+        --set bootstrapPassword=change-me \
+        --set global.cattle.psp.enabled=false \
+        --set tls=external \
+        --set agentTLSMode=system-store \
+        --version 2.11.3
+
+total_rancher_instances: 2
+
+s3:
+  bucket: your-dedicated-s3-bucket
+  region: us-east-2
+
+k3s:
+  preload_images: true
+  versions:
+    - v1.32.5+k3s1
+    - v1.32.4+k3s1
+  install_script_sha256s:
+    v1.32.5+k3s1: installer-sha256-for-v1.32.5+k3s1
+    v1.32.4+k3s1: installer-sha256-for-v1.32.4+k3s1
+  airgap_image_sha256s:
+    v1.32.5+k3s1: airgap-image-sha256-for-v1.32.5+k3s1
+    v1.32.4+k3s1: airgap-image-sha256-for-v1.32.4+k3s1
+
+tf_vars:
+  aws_prefix: "xyz"
+  aws_vpc: ""
+  aws_subnet_a: ""
+  aws_subnet_b: ""
+  aws_subnet_c: ""
+  aws_ami: ""
+  aws_subnet_id: ""
+  aws_security_group_id: ""
+  aws_pem_key_name: ""
+  aws_rds_password: ""
+  aws_route53_fqdn: ""
+  aws_ec2_instance_type: "m5.large"

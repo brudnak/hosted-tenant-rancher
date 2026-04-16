@@ -31,8 +31,6 @@ func CleanupTerraformConfig() error {
 }
 
 func GenAwsVar(
-	accessKey,
-	secretKey,
 	awsPrefix,
 	awsVpc,
 	subnetA,
@@ -57,8 +55,6 @@ func GenAwsVar(
 
 	rootBody := f.Body()
 
-	rootBody.SetAttributeValue("aws_access_key", cty.StringVal(accessKey))
-	rootBody.SetAttributeValue("aws_secret_key", cty.StringVal(secretKey))
 	rootBody.SetAttributeValue("aws_prefix", cty.StringVal(awsPrefix))
 	rootBody.SetAttributeValue("aws_vpc", cty.StringVal(awsVpc))
 	rootBody.SetAttributeValue("aws_subnet_a", cty.StringVal(subnetA))
