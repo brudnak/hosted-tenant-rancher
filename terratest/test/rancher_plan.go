@@ -1,92 +1,22 @@
 package test
 
 import (
-	"bufio"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
-	"testing"
 
 	goversion "github.com/hashicorp/go-version"
 	"github.com/spf13/viper"
 	"golang.org/x/net/html"
 )
-
-type RancherResolvedPlan struct {
-	Mode                string
-	RequestedVersion    string
-	RequestedDistro     string
-	BuildType           string
-	ResolvedDistro      string
-	ChartRepoAlias      string
-	ChartVersion        string
-	RancherImage        string
-	RancherImageTag     string
-	AgentImage          string
-	CompatibilityBase   string
-	SupportMatrixURL    string
-	RecommendedK3S      string
-	InstallScriptSHA256 string
-	AirgapImageSHA256   string
-	HelmCommands        []string
-	Explanation         []string
-}
-
-type helmSearchResult struct {
-	Name       string `json:"name"`
-	Version    string `json:"version"`
-	AppVersion string `json:"app_version"`
-}
-
-func setupConfig(tb testing.TB) {
-	tb.Helper()
-	if err := ensureConfigLoaded(); err != nil {
-		tb.Fatalf("failed to read config: %v", err)
-	}
-}
-
-func ensureConfigLoaded() error {
-	if viper.ConfigFileUsed() != "" {
-		return nil
-	}
-
-	viper.SetConfigType("yml")
-	viper.AddConfigPath("../../")
-
-	for _, configName := range []string{"tool-config", "config"} {
-		viper.SetConfigName(configName)
-		if err := viper.ReadInConfig(); err == nil {
-			return nil
-		} else {
-			var notFound viper.ConfigFileNotFoundError
-			if !errors.As(err, &notFound) {
-				return err
-			}
-		}
-	}
-
-	return fmt.Errorf("expected tool-config.yml at the repo root")
-}
-
-func getTotalRancherInstances() int {
-	if total := viper.GetInt("total_rancher_instances"); total > 0 {
-		return total
-	}
-	return viper.GetInt("total_has")
-}
 
 func prepareRancherConfiguration(totalInstances int) ([]*RancherResolvedPlan, error) {
 	mode := strings.ToLower(strings.TrimSpace(viper.GetString("rancher.mode")))
@@ -247,19 +177,37 @@ func resolveAutoRancherPlans(totalInstances int) ([]*RancherResolvedPlan, error)
 		if err != nil {
 			return nil, err
 		}
+		if requestedDistro == "prime" && buildType != "release" {
+			return nil, fmt.Errorf("prime distro requires a released Rancher version like 2.13.4")
+		}
 
 		repoCandidates, resolvedDistro, explanation := chooseRancherSourceCandidates(requestedDistro, buildType)
 		chartRepoAlias, chartVersion, compatibilityBase, err := resolveChartAndBaseline(repoCandidates, requestedVersion, minorLine, buildType)
 		if err != nil {
 			return nil, err
 		}
+		if buildType != "release" && chartRepoAlias == "rancher-prime" {
+			explanation = append(explanation, fmt.Sprintf("Using the latest released Prime chart %s as the baseline chart, then overriding Rancher images to the requested %s build", chartVersion, buildType))
+		}
 
 		rancherImage, rancherImageTag, agentImage, imageExplanation := resolveImageSettings(requestedVersion, buildType, resolvedDistro)
-		if buildType != "release" && chartVersion == requestedVersion {
+		if buildType != "release" && chartVersion == requestedVersion && shouldDropPrereleaseImageOverrides(chartRepoAlias) {
 			rancherImage = ""
 			rancherImageTag = ""
 			agentImage = ""
-			explanation = append(explanation, fmt.Sprintf("Using exact chart match %s/rancher@%s, so no image override is needed", chartRepoAlias, chartVersion))
+			explanation = append(explanation, fmt.Sprintf("Using exact chart match %s/rancher@%s, so no Rancher image overrides are needed", chartRepoAlias, chartVersion))
+		}
+		if buildType != "release" && chartVersion == requestedVersion && !shouldDropPrereleaseImageOverrides(chartRepoAlias) {
+			explanation = append(explanation, fmt.Sprintf("Using exact chart match %s/rancher@%s, while keeping explicit staging Rancher image overrides for this optimus chart", chartRepoAlias, chartVersion))
+		}
+		if buildType != "release" && chartRepoAlias == "rancher-latest" {
+			rancherImage = ""
+			agentImage = ""
+			explanation = append(explanation, fmt.Sprintf("Using rancher-latest for this %s build, so only the Rancher image tag is overridden to %s", buildType, rancherImageTag))
+		}
+		if buildType == "release" && chartRepoAlias == "rancher-prime" {
+			rancherImage = "registry.rancher.com/rancher/rancher"
+			explanation = append(explanation, fmt.Sprintf("Using Prime chart and Prime Rancher image for released version %s", requestedVersion))
 		}
 		explanation = append(explanation, imageExplanation...)
 
@@ -311,322 +259,6 @@ func resolveAutoRancherPlans(totalInstances int) ([]*RancherResolvedPlan, error)
 	}
 
 	return plans, nil
-}
-
-func confirmResolvedPlans(plans []*RancherResolvedPlan) error {
-	if len(plans) == 0 || plans[0] == nil || plans[0].Mode == "manual" {
-		return nil
-	}
-
-	logResolvedPlans(plans)
-
-	if viper.GetBool("rancher.auto_approve") {
-		log.Printf("[resolver] Auto-approve enabled, continuing without prompt")
-		return nil
-	}
-
-	if tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err == nil {
-		defer tty.Close()
-		if _, err := fmt.Fprint(tty, "Continue with this hosted/tenant Rancher plan? [y/N]: "); err != nil {
-			return err
-		}
-		reader := bufio.NewReader(tty)
-		response, err := reader.ReadString('\n')
-		if err != nil {
-			return err
-		}
-		if isAffirmative(response) {
-			return nil
-		}
-		return fmt.Errorf("user canceled resolved Rancher plans")
-	}
-
-	if runtime.GOOS == "darwin" {
-		approved, err := confirmResolvedPlansWithOSDialog(plans)
-		if err == nil {
-			if approved {
-				return nil
-			}
-			return fmt.Errorf("user canceled resolved Rancher plans")
-		}
-	}
-
-	fmt.Print("Continue with this hosted/tenant Rancher plan? [y/N]: ")
-	reader := bufio.NewReader(os.Stdin)
-	response, err := reader.ReadString('\n')
-	if err != nil {
-		return err
-	}
-	if isAffirmative(response) {
-		return nil
-	}
-
-	return fmt.Errorf("user canceled resolved Rancher plans")
-}
-
-func isAffirmative(value string) bool {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "y", "yes", "continue":
-		return true
-	default:
-		return false
-	}
-}
-
-func confirmResolvedPlansWithOSDialog(plans []*RancherResolvedPlan) (bool, error) {
-	script := `on run argv
-set planMessage to item 1 of argv
-button returned of (display dialog planMessage buttons {"Cancel", "Continue"} default button "Continue" cancel button "Cancel" with title "Hosted/Tenant Rancher Plan")
-end run`
-	output, err := exec.Command("osascript", "-e", script, buildResolvedPlansDialogMessage(plans)).CombinedOutput()
-	if err != nil {
-		return false, err
-	}
-
-	return strings.Contains(string(output), "Continue"), nil
-}
-
-func buildResolvedPlansDialogMessage(plans []*RancherResolvedPlan) string {
-	sections := []string{"Continue with this hosted/tenant Rancher plan?"}
-
-	for i, plan := range plans {
-		if plan == nil {
-			continue
-		}
-
-		section := []string{fmt.Sprintf("Instance %d", i+1)}
-		if plan.RequestedVersion != "" {
-			section = append(section, "Requested Rancher: "+plan.RequestedVersion)
-		}
-		if plan.ChartRepoAlias != "" {
-			section = append(section, fmt.Sprintf("Selected chart: %s/rancher@%s", plan.ChartRepoAlias, plan.ChartVersion))
-		}
-		if plan.RecommendedK3S != "" {
-			section = append(section, "Resolved K3s/K8s: "+plan.RecommendedK3S)
-		}
-		for j, helmCommand := range plan.HelmCommands {
-			section = append(section, fmt.Sprintf("Helm command %d:", j+1), sanitizeHelmCommand(helmCommand))
-		}
-		sections = append(sections, strings.Join(section, "\n"))
-	}
-
-	return strings.Join(sections, "\n\n")
-}
-
-func logResolvedPlans(plans []*RancherResolvedPlan) {
-	for i, plan := range plans {
-		log.Printf("[resolver] Hosted/Tenant resolution summary for instance %d:", i+1)
-		log.Printf("[resolver] Requested Rancher: %s", plan.RequestedVersion)
-		log.Printf("[resolver] Resolved chart: %s/rancher@%s", plan.ChartRepoAlias, plan.ChartVersion)
-		log.Printf("[resolver] Resolved K3s: %s", plan.RecommendedK3S)
-		log.Printf("[resolver] Support matrix: %s", plan.SupportMatrixURL)
-		log.Printf("[resolver] Installer SHA256: %s", plan.InstallScriptSHA256)
-		if plan.AirgapImageSHA256 != "" {
-			log.Printf("[resolver] Airgap SHA256: %s", plan.AirgapImageSHA256)
-		}
-		for _, explanation := range plan.Explanation {
-			log.Printf("[resolver] Reason: %s", explanation)
-		}
-		for _, helmCommand := range plan.HelmCommands {
-			log.Printf("[resolver] Helm command:\n%s", sanitizeHelmCommand(helmCommand))
-		}
-	}
-}
-
-func sanitizeHelmCommand(command string) string {
-	pattern := regexp.MustCompile(`bootstrapPassword=[^\s\\]+`)
-	return pattern.ReplaceAllString(command, "bootstrapPassword=<redacted>")
-}
-
-func validateHostedConfiguration(totalInstances int, helmCommands []string, plans []*RancherResolvedPlan) error {
-	if totalInstances < 2 {
-		return fmt.Errorf("total_rancher_instances must be at least 2 (1 host + 1 tenant)")
-	}
-	if totalInstances > 4 {
-		return fmt.Errorf("total_rancher_instances cannot exceed 4")
-	}
-	if len(helmCommands) != totalInstances {
-		return fmt.Errorf("rancher.helm_commands has %d entries but total_rancher_instances is %d", len(helmCommands), totalInstances)
-	}
-	if err := validateResolvedHelmCommands(helmCommands); err != nil {
-		return err
-	}
-	return validatePinnedK3SArtifacts(plans)
-}
-
-func validateResolvedHelmCommands(helmCommands []string) error {
-	for i, helmCommand := range helmCommands {
-		if !strings.Contains(helmCommand, "helm install") && !strings.Contains(helmCommand, "helm upgrade") {
-			return fmt.Errorf("helm command %d is not an install/upgrade command", i+1)
-		}
-		requiredFlags := []string{
-			"--set hostname=",
-			"--set bootstrapPassword=",
-			"--set agentTLSMode=system-store",
-		}
-		for _, requiredFlag := range requiredFlags {
-			if !strings.Contains(helmCommand, requiredFlag) {
-				return fmt.Errorf("helm command %d is missing %s", i+1, requiredFlag)
-			}
-		}
-	}
-	return nil
-}
-
-func validateLocalToolingPreflight(helmCommands []string) error {
-	requiredCommands := []string{"kubectl", "helm", "terraform"}
-	for _, commandName := range requiredCommands {
-		if _, err := exec.LookPath(commandName); err != nil {
-			return fmt.Errorf("%s is required locally but was not found in PATH", commandName)
-		}
-	}
-
-	if err := refreshHelmRepoIndexes(); err != nil {
-		return err
-	}
-
-	helmRepoOutput, err := exec.Command("helm", "repo", "list").CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to run 'helm repo list': %w", err)
-	}
-
-	missingHelmRepos := findMissingHelmRepos(string(helmRepoOutput), helmCommands)
-	if len(missingHelmRepos) > 0 {
-		return fmt.Errorf("missing required Helm repos locally: %s", strings.Join(missingHelmRepos, ", "))
-	}
-
-	return nil
-}
-
-func refreshHelmRepoIndexes() error {
-	if output, err := exec.Command("helm", "repo", "update").CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to run 'helm repo update': %w (%s)", err, strings.TrimSpace(string(output)))
-	}
-	return nil
-}
-
-func validateSecretEnvironment() error {
-	loadSecretEnvironmentFromZProfile()
-	loadLegacySecretFallbacksFromConfig()
-
-	requiredEnvVars := []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"}
-	for _, envVar := range requiredEnvVars {
-		if strings.TrimSpace(os.Getenv(envVar)) == "" {
-			return fmt.Errorf("%s must be set in the environment", envVar)
-		}
-	}
-
-	dockerHubUsername := strings.TrimSpace(os.Getenv("DOCKERHUB_USERNAME"))
-	dockerHubPassword := strings.TrimSpace(os.Getenv("DOCKERHUB_PASSWORD"))
-	if (dockerHubUsername == "") != (dockerHubPassword == "") {
-		return fmt.Errorf("set both DOCKERHUB_USERNAME and DOCKERHUB_PASSWORD, or leave both unset")
-	}
-
-	return nil
-}
-
-func loadSecretEnvironmentFromZProfile() {
-	desiredVars := []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "DOCKERHUB_USERNAME", "DOCKERHUB_PASSWORD"}
-	missingVars := false
-	for _, envVar := range desiredVars {
-		if strings.TrimSpace(os.Getenv(envVar)) == "" {
-			missingVars = true
-			break
-		}
-	}
-	if !missingVars {
-		return
-	}
-
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return
-	}
-
-	content, err := os.ReadFile(filepath.Join(homeDir, ".zprofile"))
-	if err != nil {
-		return
-	}
-
-	for _, line := range strings.Split(string(content), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") || !strings.HasPrefix(line, "export ") {
-			continue
-		}
-
-		parts := strings.SplitN(strings.TrimPrefix(line, "export "), "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-
-		key := strings.TrimSpace(parts[0])
-		if !slices.Contains(desiredVars, key) || strings.TrimSpace(os.Getenv(key)) != "" {
-			continue
-		}
-
-		value := strings.Trim(strings.TrimSpace(parts[1]), `"'`)
-		if value != "" {
-			_ = os.Setenv(key, value)
-		}
-	}
-}
-
-func loadLegacySecretFallbacksFromConfig() {
-	_ = ensureConfigLoaded()
-
-	legacySecrets := map[string]string{
-		"AWS_ACCESS_KEY_ID":     strings.TrimSpace(viper.GetString("tf_vars.aws_access_key")),
-		"AWS_SECRET_ACCESS_KEY": strings.TrimSpace(viper.GetString("tf_vars.aws_secret_key")),
-		"DOCKERHUB_USERNAME":    strings.TrimSpace(viper.GetString("dockerhub.username")),
-		"DOCKERHUB_PASSWORD":    strings.TrimSpace(viper.GetString("dockerhub.password")),
-	}
-
-	for envVar, value := range legacySecrets {
-		if strings.TrimSpace(os.Getenv(envVar)) == "" && value != "" {
-			_ = os.Setenv(envVar, value)
-		}
-	}
-}
-
-func validatePinnedK3SArtifacts(plans []*RancherResolvedPlan) error {
-	seen := map[string]bool{}
-	for _, plan := range plans {
-		if plan == nil {
-			continue
-		}
-
-		installURL := buildK3SInstallScriptURL(plan.RecommendedK3S)
-		dedupKey := installURL + "|" + strings.ToLower(plan.InstallScriptSHA256)
-		if !seen[dedupKey] {
-			seen[dedupKey] = true
-			if err := validateRemoteSHA256(installURL, plan.InstallScriptSHA256); err != nil {
-				return err
-			}
-		}
-
-		if plan.AirgapImageSHA256 != "" {
-			airgapURL := buildK3SAirgapImageURL(plan.RecommendedK3S)
-			dedupKey = airgapURL + "|" + strings.ToLower(plan.AirgapImageSHA256)
-			if !seen[dedupKey] {
-				seen[dedupKey] = true
-				if err := validateRemoteSHA256(airgapURL, plan.AirgapImageSHA256); err != nil {
-					return err
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func validateRemoteSHA256(url, expected string) error {
-	actual, err := resolveRemoteSHA256(url)
-	if err != nil {
-		return err
-	}
-	if !strings.EqualFold(actual, expected) {
-		return fmt.Errorf("checksum mismatch for %s: expected %s, got %s", url, expected, actual)
-	}
-	return nil
 }
 
 func resolveRemoteSHA256(url string) (string, error) {
@@ -771,13 +403,6 @@ func resolveChartAndBaseline(repoCandidates []string, requestedVersion, minorLin
 		return "", "", "", lastErr
 	}
 	return "", "", "", fmt.Errorf("could not resolve a Rancher chart version for %s from repos %s", requestedVersion, strings.Join(repoCandidates, ", "))
-}
-
-type resolvedChartMatch struct {
-	repoAlias             string
-	chartVersion          string
-	compatibilityBaseline string
-	matchRank             int
 }
 
 func recordResolvedChartMatch(bestMatch **resolvedChartMatch, repoAlias, chartVersion, compatibilityBaseline string, matchRank int) {
@@ -974,6 +599,10 @@ func resolveImageSettings(requestedVersion, buildType, resolvedDistro string) (s
 	}
 }
 
+func shouldDropPrereleaseImageOverrides(chartRepoAlias string) bool {
+	return !strings.HasPrefix(chartRepoAlias, "optimus-")
+}
+
 func buildSupportMatrixURL(releasedVersion string) string {
 	pathVersion := strings.ReplaceAll(releasedVersion, ".", "-")
 	return fmt.Sprintf("https://www.suse.com/suse-rancher/support-matrix/all-supported-versions/rancher-v%s/", pathVersion)
@@ -1123,37 +752,4 @@ func extractTextFromHTML(document string) (string, error) {
 	walk(root)
 
 	return strings.Join(textParts, " "), nil
-}
-
-func findMissingHelmRepos(helmRepoListOutput string, helmCommands []string) []string {
-	knownRepos := map[string]bool{}
-	for _, line := range strings.Split(helmRepoListOutput, "\n") {
-		fields := strings.Fields(line)
-		if len(fields) == 0 || strings.EqualFold(fields[0], "NAME") {
-			continue
-		}
-		knownRepos[fields[0]] = true
-	}
-
-	missingRepos := map[string]bool{}
-	for _, helmCommand := range helmCommands {
-		fields := strings.Fields(helmCommand)
-		for _, field := range fields {
-			if !strings.Contains(field, "/") || strings.HasPrefix(field, "http://") || strings.HasPrefix(field, "https://") || strings.HasPrefix(field, "--") {
-				continue
-			}
-			repoName := strings.SplitN(field, "/", 2)[0]
-			if repoName != "" && repoName != "." && !knownRepos[repoName] {
-				missingRepos[repoName] = true
-			}
-			break
-		}
-	}
-
-	var missing []string
-	for repoName := range missingRepos {
-		missing = append(missing, repoName)
-	}
-	slices.Sort(missing)
-	return missing
 }
