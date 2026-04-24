@@ -11,7 +11,6 @@ import (
 	"time"
 
 	toolkit "github.com/brudnak/hosted-tenant-rancher/tools"
-	"github.com/brudnak/hosted-tenant-rancher/tools/hcl"
 	"github.com/gruntwork-io/terratest/modules/terraform"
 	"github.com/spf13/viper"
 )
@@ -32,18 +31,14 @@ const (
 func TestHosted(t *testing.T) {
 	setupConfig(t)
 
-	if err := maybeEditAutoModePreflight(); err != nil {
-		t.Fatalf("preflight editor canceled or failed: %v", err)
+	resolvedPlans, err := resolveRancherSetup()
+	if err != nil {
+		t.Fatalf("Rancher setup canceled or failed: %v", err)
 	}
 
 	totalInstances := getTotalRancherInstances()
 	if totalInstances == 0 {
 		t.Fatal("total_rancher_instances must be set")
-	}
-
-	resolvedPlans, err := prepareRancherConfiguration(totalInstances)
-	if err != nil {
-		t.Fatalf("failed to prepare Rancher configuration: %v", err)
 	}
 
 	helmCommands := viper.GetStringSlice("rancher.helm_commands")
@@ -57,9 +52,6 @@ func TestHosted(t *testing.T) {
 	}
 	if err := validateHostedConfiguration(totalInstances, helmCommands, resolvedPlans); err != nil {
 		t.Fatalf("configuration validation failed: %v", err)
-	}
-	if err := confirmResolvedPlans(resolvedPlans); err != nil {
-		t.Fatalf("canceled before provisioning: %v", err)
 	}
 
 	err = checkS3ObjectExists(tfState)
@@ -330,11 +322,6 @@ func TestCleanup(t *testing.T) {
 	err := clearS3Bucket(viper.GetString("s3.bucket"))
 	if err != nil {
 		log.Printf("Error clearing bucket [from func clearS3Bucket]: %v", err)
-	}
-
-	err = hcl.CleanupTerraformConfig()
-	if err != nil {
-		log.Printf("error cleaning up main.tf and dirs: %s", err)
 	}
 
 	if cleanupEstimate != nil {

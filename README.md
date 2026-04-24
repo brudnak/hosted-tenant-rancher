@@ -124,6 +124,42 @@ The K3s bootstrap path verifies downloaded upstream artifacts before using them:
 - The installer must match the pinned SHA256 before it runs.
 - The airgap image bundle must match the pinned SHA256 before it is moved into the K3s image import directory.
 
+### Supply chain security
+
+Every file downloaded over the network as part of the K3s install path is verified against a known-good SHA256 before it is used or executed. This protects against compromised upstream releases (e.g. a tampered GitHub release asset) reaching your nodes.
+
+| Pattern | Location | Status |
+|---|---|---|
+| `curl \| sh` | — | Eliminated — no instances exist in this repo |
+| K3s installer curl | [tools.go:675](tools/tools.go#L675) | Hardened — SHA256 validated twice (Go preflight + bash on node) |
+| K3s airgap images curl | [tools.go:641](tools/tools.go#L641) | Hardened — SHA256 validated on remote node before install |
+
+**K3s installer script** (`tools.go`)
+
+The installer is validated twice — once in Go before provisioning starts, and once in bash on the remote node:
+
+1. Before provisioning, `validatePinnedK3SArtifacts` downloads `install.sh` for the pinned K3s version and compares its SHA256 against the pinned value. If the hash does not match, provisioning is blocked entirely.
+2. On each node, the install command downloads the script to a temp file, runs `sha256sum -c` against the same hash, and refuses to execute if validation fails — with a clear `SECURITY ERROR` message in stderr.
+
+Where the expected hash comes from depends on mode:
+
+- **`manual` mode** — you supply `k3s.install_script_sha256` (single instance) or `k3s.install_script_sha256s` (multiple instances) explicitly in your config. The tool checks your pinned value before any node is touched.
+- **`auto` mode** — the tool fetches the versioned `install.sh` at plan time, computes its SHA256, and stores it in the resolved plan. That computed hash is then used for both the Go preflight check and the per-node bash validation.
+
+**K3s airgap image bundle** (`tools.go`)
+
+When `k3s.preload_images: true` is set, the airgap image tarball is also validated before it is moved into `/var/lib/rancher/k3s/agent/images/`:
+
+1. The tarball (`k3s-airgap-images-amd64.tar.zst`) is downloaded to `/tmp`.
+2. `sha256sum -c` is run against the pinned hash (from `k3s.airgap_image_sha256s` in manual mode, or the resolved plan in auto mode).
+3. If validation fails, the tarball is discarded via the `trap` cleanup and the script exits with a `SECURITY ERROR` — the corrupted file never reaches the K3s image directory.
+
+**Rancher API calls**
+
+Calls to the Rancher API from the test runner (token creation, import manifest lookup, `server-url` update, stability probes) currently skip TLS verification when talking back to the Rancher URL. This is intentional for now: the ALB → instance re-encrypt path and Rancher's own bootstrap certs have historically caused flakes during early startup, and the calls are authenticated with a freshly-minted admin bearer token. Tightening this to full TLS verification is a known follow-up.
+
+`kubectl apply` inside the generated `import.sh` uses `--insecure-skip-tls-verify` to hit the imported cluster's K3s API server on its public node IP (self-signed cert). The manifest itself is fetched over HTTPS from the ACM-signed Rancher URL — the flag only applies to the kubeconfig target.
+
 ### Updating K3s Checksums
 
 Update the K3s checksums whenever you add or change an entry in `k3s.versions`.

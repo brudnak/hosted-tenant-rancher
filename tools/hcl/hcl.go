@@ -2,33 +2,12 @@ package hcl
 
 import (
 	"fmt"
+	"os"
+
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/spf13/viper"
 	"github.com/zclconf/go-cty/cty"
-	"log"
-	"os"
 )
-
-func CleanupTerraformConfig() error {
-	tenantInstances := viper.GetInt("total_rancher_instances")
-	for i := 0; i < tenantInstances; i++ {
-		tenantIndex := i + 1
-		kubectlDir := fmt.Sprintf("../modules/kubectl/tenant-%d", tenantIndex)
-		helmDir := fmt.Sprintf("../modules/helm/tenant-%d", tenantIndex)
-
-		err := os.RemoveAll(kubectlDir)
-		if err != nil {
-			log.Printf("failed to remove kubectl directory for tenant %d: %v", tenantIndex, err)
-		}
-
-		err = os.RemoveAll(helmDir)
-		if err != nil {
-			log.Printf("failed to remove helm directory for tenant %d: %v", tenantIndex, err)
-		}
-	}
-
-	return nil
-}
 
 func GenAwsVar(
 	awsPrefix,

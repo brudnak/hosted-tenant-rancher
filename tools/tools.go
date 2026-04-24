@@ -784,18 +784,6 @@ func k3SChecksumForVersion(configKey, version string) (string, error) {
 	return checksum, nil
 }
 
-func validateDockerHubConfig() error {
-	username, password := dockerHubCredentials()
-	if username == "" && password == "" {
-		return nil
-	}
-	if username == "" || password == "" {
-		return fmt.Errorf("set both DOCKERHUB_USERNAME and DOCKERHUB_PASSWORD, or configure both dockerhub.username and dockerhub.password")
-	}
-
-	return nil
-}
-
 func dockerHubCredentials() (string, string) {
 	username := strings.TrimSpace(os.Getenv("DOCKERHUB_USERNAME"))
 	password := strings.TrimSpace(os.Getenv("DOCKERHUB_PASSWORD"))

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os/exec"
 	"regexp"
@@ -152,11 +153,14 @@ func normalizeVersionInput(value string) string {
 }
 
 func resolveAutoRancherPlans(totalInstances int) ([]*RancherResolvedPlan, error) {
+	log.Printf("[resolver] Starting auto-mode plan resolution for %d instance(s)", totalInstances)
+
 	requestedVersions, err := getRequestedRancherVersions(totalInstances)
 	if err != nil {
 		return nil, err
 	}
 
+	log.Printf("[resolver] Refreshing Helm repo indexes...")
 	if err := refreshHelmRepoIndexes(); err != nil {
 		return nil, err
 	}
@@ -172,7 +176,8 @@ func resolveAutoRancherPlans(totalInstances int) ([]*RancherResolvedPlan, error)
 	}
 
 	plans := make([]*RancherResolvedPlan, 0, len(requestedVersions))
-	for _, requestedVersion := range requestedVersions {
+	for instanceIndex, requestedVersion := range requestedVersions {
+		log.Printf("[resolver] Instance %d: resolving Rancher %s", instanceIndex+1, requestedVersion)
 		buildType, minorLine, err := classifyRancherVersion(requestedVersion)
 		if err != nil {
 			return nil, err
@@ -182,10 +187,12 @@ func resolveAutoRancherPlans(totalInstances int) ([]*RancherResolvedPlan, error)
 		}
 
 		repoCandidates, resolvedDistro, explanation := chooseRancherSourceCandidates(requestedDistro, buildType)
+		log.Printf("[resolver] Instance %d: searching Helm repos %s for a matching chart...", instanceIndex+1, strings.Join(repoCandidates, ", "))
 		chartRepoAlias, chartVersion, compatibilityBase, err := resolveChartAndBaseline(repoCandidates, requestedVersion, minorLine, buildType)
 		if err != nil {
 			return nil, err
 		}
+		log.Printf("[resolver] Instance %d: selected chart %s/rancher@%s", instanceIndex+1, chartRepoAlias, chartVersion)
 		if buildType != "release" && chartRepoAlias == "rancher-prime" {
 			explanation = append(explanation, fmt.Sprintf("Using the latest released Prime chart %s as the baseline chart, then overriding Rancher images to the requested %s build", chartVersion, buildType))
 		}
@@ -212,18 +219,21 @@ func resolveAutoRancherPlans(totalInstances int) ([]*RancherResolvedPlan, error)
 		explanation = append(explanation, imageExplanation...)
 
 		supportMatrixURL := buildSupportMatrixURL(compatibilityBase)
+		log.Printf("[resolver] Instance %d: fetching SUSE support matrix for Rancher %s...", instanceIndex+1, compatibilityBase)
 		highestK3SMinor, supportExplanation, err := resolveHighestSupportedK3SMinor(supportMatrixURL)
 		if err != nil {
 			return nil, err
 		}
 		explanation = append(explanation, supportExplanation)
 
+		log.Printf("[resolver] Instance %d: resolving latest K3s patch in the v1.%d line...", instanceIndex+1, highestK3SMinor)
 		recommendedK3S, err := resolveLatestK3SPatch(highestK3SMinor)
 		if err != nil {
 			return nil, err
 		}
 		explanation = append(explanation, fmt.Sprintf("Selected %s as the latest available K3s patch in the supported v1.%d line", recommendedK3S, highestK3SMinor))
 
+		log.Printf("[resolver] Instance %d: downloading K3s installer %s to compute SHA256...", instanceIndex+1, recommendedK3S)
 		installSHA, err := resolveRemoteSHA256(buildK3SInstallScriptURL(recommendedK3S))
 		if err != nil {
 			return nil, err
@@ -231,12 +241,14 @@ func resolveAutoRancherPlans(totalInstances int) ([]*RancherResolvedPlan, error)
 
 		airgapSHA := ""
 		if viper.GetBool("k3s.preload_images") {
+			log.Printf("[resolver] Instance %d: downloading K3s airgap image bundle to compute SHA256...", instanceIndex+1)
 			airgapSHA, err = resolveRemoteSHA256(buildK3SAirgapImageURL(recommendedK3S))
 			if err != nil {
 				return nil, err
 			}
 		}
 
+		log.Printf("[resolver] Instance %d: plan ready (chart %s/rancher@%s, K3s %s)", instanceIndex+1, chartRepoAlias, chartVersion, recommendedK3S)
 		plans = append(plans, &RancherResolvedPlan{
 			Mode:                "auto",
 			RequestedVersion:    requestedVersion,
